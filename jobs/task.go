@@ -1,8 +1,8 @@
 package jobs
 
 type GoTaskResult struct {
-	Status error
 	Value  interface{}
+	Status error
 }
 type GoTask interface {
 	Run() *GoTaskResult
