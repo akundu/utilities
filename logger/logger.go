@@ -21,6 +21,10 @@ func Init(traceHandle io.Writer, infoHandle io.Writer, warningHandle io.Writer, 
 	Error = log.New(errorHandle, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 }
 
+var already_initialized bool = false
 func DefaultLoggerInit() {
-	Init(ioutil.Discard, os.Stdout, os.Stdout, os.Stderr)
+	if(already_initialized == false ) {
+		Init(ioutil.Discard, os.Stdout, os.Stdout, os.Stderr)
+		already_initialized = true
+	}
 }
