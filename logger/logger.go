@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"time"
 )
 
 var (
@@ -23,4 +24,9 @@ func Init(traceHandle io.Writer, infoHandle io.Writer, warningHandle io.Writer, 
 
 func DefaultLoggerInit() {
 	Init(ioutil.Discard, os.Stdout, os.Stdout, os.Stderr)
+}
+
+func TrackTime(start time.Time, name string) {
+	elapsed := time.Since(start)
+	Info.Println("%s took %s", name, elapsed)
 }
