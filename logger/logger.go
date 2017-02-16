@@ -32,5 +32,5 @@ func DefaultLoggerInit() {
 
 func TrackTime(start time.Time, name string) {
 	elapsed := time.Since(start)
-	Info.Println("%s took %s", name, elapsed)
+	Info.Printf("%s %d\n", name, int(elapsed/1000000))
 }
