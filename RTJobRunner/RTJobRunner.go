@@ -22,7 +22,7 @@ type JobHandler struct {
 	worker         Worker
 }
 
-func NewJobHandler(num_to_setup int, worker Worker) *JobHandler {
+func NewJobHandler(num_to_setup int, worker Worker, print_results bool) *JobHandler {
 	jh := &JobHandler{
 		jobs:        make(chan Request, num_to_setup),
 		results:     make(chan Response, num_to_setup),
@@ -35,7 +35,7 @@ func NewJobHandler(num_to_setup int, worker Worker) *JobHandler {
 	}
 
 	jh.ws_job_tracker.Add(1)
-	go jh.waitForResults()
+	go jh.waitForResults(print_results)
 
 	return jh
 }
@@ -63,13 +63,13 @@ func (this *JobHandler) WaitForJobsToComplete() {
 	this.ws_job_tracker.Wait()
 }
 
-func (this *JobHandler) waitForResults() {
+func (this *JobHandler) waitForResults(print_results bool) {
 	num_processed := 0
 	for this.done_adding == false || num_processed < this.num_added {
 		result := <-this.results
 		num_processed++
-		if result != nil {
-			//logger.Info.Printf("result read = %v\n", result)
+		if result != nil && print_results == true{
+			logger.Info.Println(result)
 		}
 	}
 	this.ws_job_tracker.Done()
