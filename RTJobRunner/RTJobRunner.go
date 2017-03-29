@@ -45,6 +45,7 @@ func (this *JobHandler) AddJob(job Request) {
 	this.num_added++
 }
 
+/*
 func (this *JobHandler) GetJobsFromStdin() {
 	//read from stdin
 	bio := bufio.NewReader(os.Stdin)
@@ -58,6 +59,37 @@ func (this *JobHandler) GetJobsFromStdin() {
 		this.AddJob(line)
 	}
 }
+*/
+
+type JobHandlerLineOutputFilter func(string) string //line - outputline - if outputline is empty - dont add anything
+func (this *JobHandler) GetJobsFromStdin(jhlo JobHandlerLineOutputFilter) {
+	//read from stdin
+	bio := bufio.NewReader(os.Stdin)
+	for {
+		line, err := bio.ReadString('\n')
+		if err != nil {
+			break
+		}
+		line = strings.Trim(line, "\n \r\n")
+		logger.Trace.Println("adding ", line)
+		if jhlo == nil {
+			this.AddJob(line)
+		} else {
+			new_line := jhlo(line)
+			if len(new_line) != 0 {
+				this.AddJob(new_line)
+			}
+		}
+	}
+
+	//call the handler one last time - in case they need to add anything else
+	if jhlo != nil {
+		line := jhlo("")
+		if len(line) > 0 {
+			this.AddJob(line)
+		}
+	}
+}
 
 func (this *JobHandler) WaitForJobsToComplete() {
 	this.ws_job_tracker.Wait()
@@ -68,7 +100,7 @@ func (this *JobHandler) waitForResults(print_results bool) {
 	for this.done_adding == false || num_processed < this.num_added {
 		result := <-this.results
 		num_processed++
-		if result != nil && print_results == true{
+		if result != nil && print_results == true {
 			logger.Info.Println(result)
 		}
 	}
