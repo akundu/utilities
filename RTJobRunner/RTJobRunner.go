@@ -110,5 +110,8 @@ func (this *JobHandler) waitForResults(print_results bool) {
 
 func (this *JobHandler) DoneAddingJobs() {
 	close(this.jobs)
+	if this.num_added == 0 {
+		close(this.results)
+	}
 	this.done_adding = true
 }
