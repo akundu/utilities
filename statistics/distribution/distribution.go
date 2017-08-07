@@ -30,28 +30,42 @@ type gaussianGenerator struct {
 	_lower_bound         int
 	_upper_bound         int
 	_rounded_power_of_10 int
+	_sorted_result       []int
 }
 
-func NewgaussianGenerator(lower_bound, upper_bound int) *gaussianGenerator {
-	return &gaussianGenerator{
+func NewgaussianGenerator(lower_bound, upper_bound, num_to_generate int) *gaussianGenerator {
+	result := &gaussianGenerator{
 		_grng:                rng.NewGaussianGenerator(time.Now().UnixNano()),
 		_lower_bound:         lower_bound,
 		_upper_bound:         upper_bound,
-		_rounded_power_of_10: closestPowerOf10(upper_bound - 1),
+		_rounded_power_of_10: closestPowerOf10(upper_bound),
 	}
+	result.buildNumbers(num_to_generate)
+	return result
 }
-func (this gaussianGenerator) GenerateNumbers(num_to_generate int) []int {
+func (this *gaussianGenerator) buildNumbers(num_to_generate int) {
 	num_list := make([]int, num_to_generate)
 	for i := 0; i < num_to_generate; i++ {
-		num_list[i] = int(this._grng.Gaussian(0, 3) * float64(this._rounded_power_of_10))
+		g_num := this._grng.Gaussian(0, 3)
+		num_list[i] = int(g_num * float64(this._rounded_power_of_10))
 	}
 
-	result := make([]int, num_to_generate)
 	sort.Ints(num_list)
-	for _, num := range num_list {
-		result = append(result, mappingValues(num, num_list[0], num_list[len(num_list)-1], this._lower_bound, this._upper_bound))
+	/* make everything positive
+	if num_list[0] < 0 {
+		amt_to_add_by := (-1 * num_list[0])
+		for i, _ := range num_list {
+			num_list[i] = num_list[i] + amt_to_add_by
+		}
 	}
-	return result
+	*/
+	this._sorted_result = make([]int, num_to_generate)
+	for i, num := range num_list {
+		this._sorted_result[i] = mappingValues(num, num_list[0], num_list[len(num_list)-1], this._lower_bound, this._upper_bound)
+	}
+}
+func (this gaussianGenerator) GenerateNumbers() []int {
+	return this._sorted_result
 }
 
 func mappingValues(num, old_min, old_max, new_min, new_max int) int {
