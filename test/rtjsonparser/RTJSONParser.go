@@ -24,12 +24,13 @@ func (this *worker) PreRun() {
 }
 func (this *worker) Run(id int, jobs <-chan RTJobRunner.Request, results chan<- RTJobRunner.Response) {
 	for j := range jobs {
-		job, ok := j.(string)
+		job, ok := j.(*RTJobRunner.JHJSONParserString)
 		if ok == false {
 			results <- nil
+			logger.Error.Printf("got error while processing %v\n", job)
 			continue
 		}
-		results <- job
+		results <- job.GetJob()
 	}
 }
 

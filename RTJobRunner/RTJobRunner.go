@@ -99,7 +99,7 @@ func (this *JobHandler) processJobsFromJSON(jhjp *JHJSONParserString) error {
 		jhjp.NumIterations = 1
 	}
 	for i := 0 ; i < jhjp.NumIterations ; i++{
-		this.AddJob(jhjp.GetJob())
+		this.AddJob(jhjp)
 	}
 	return nil
 }
