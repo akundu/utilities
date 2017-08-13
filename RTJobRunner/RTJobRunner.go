@@ -2,6 +2,8 @@ package RTJobRunner
 
 import (
 	"bufio"
+	"encoding/json"
+	"io/ioutil"
 	"os"
 	"strings"
 	"sync"
@@ -11,7 +13,10 @@ import (
 
 type Response interface{}
 type Request interface{}
-type Worker func(int, <-chan Request, chan<- Response)
+type Worker interface {
+	PreRun()
+	Run(id int, jobs <-chan Request, results chan<- Response)
+}
 
 type JobHandler struct {
 	jobs           chan Request
@@ -20,6 +25,7 @@ type JobHandler struct {
 	num_added      int
 	done_adding    bool
 	worker         Worker
+	Results        []interface{}
 }
 
 func NewJobHandler(num_to_setup int, worker Worker, print_results bool) *JobHandler {
@@ -31,7 +37,8 @@ func NewJobHandler(num_to_setup int, worker Worker, print_results bool) *JobHand
 	}
 
 	for w := 0; w < num_to_setup; w++ {
-		go worker(w, jh.jobs, jh.results)
+		worker.PreRun()
+		go worker.Run(w, jh.jobs, jh.results)
 	}
 
 	jh.ws_job_tracker.Add(1)
@@ -45,23 +52,7 @@ func (this *JobHandler) AddJob(job Request) {
 	this.num_added++
 }
 
-/*
-func (this *JobHandler) GetJobsFromStdin() {
-	//read from stdin
-	bio := bufio.NewReader(os.Stdin)
-	for {
-		line, err := bio.ReadString('\n')
-		if err != nil {
-			break
-		}
-		line = strings.Trim(line, "\n \r\n")
-		logger.Trace.Println("adding ", line)
-		this.AddJob(line)
-	}
-}
-*/
-
-type JobHandlerLineOutputFilter func(string) string //line - outputline - if outputline is empty - dont add anything
+type JobHandlerLineOutputFilter func(string) Request //line - outputline - if outputline is empty - dont add anything
 func (this *JobHandler) GetJobsFromStdin(jhlo JobHandlerLineOutputFilter) {
 	//read from stdin
 	bio := bufio.NewReader(os.Stdin)
@@ -75,20 +66,61 @@ func (this *JobHandler) GetJobsFromStdin(jhlo JobHandlerLineOutputFilter) {
 		if jhlo == nil {
 			this.AddJob(line)
 		} else {
-			new_line := jhlo(line)
-			if len(new_line) != 0 {
-				this.AddJob(new_line)
+			filtered_job := jhlo(line)
+			if filtered_job != nil {
+				this.AddJob(filtered_job)
 			}
 		}
 	}
 
-	//call the handler one last time - in case they need to add anything else
+	//call the handler one last time - in case the filter wants to add anything else
 	if jhlo != nil {
-		line := jhlo("")
-		if len(line) > 0 {
-			this.AddJob(line)
+		filtered_job := jhlo("")
+		if filtered_job != nil {
+			this.AddJob(filtered_job)
 		}
 	}
+}
+
+type JHJsonParser struct {
+	DependentJobs []*JHJsonParser `json: "dependentJobs"`
+	Job           string          `json: "job"`
+	Name          string          `json: "name"`
+	RunType       string          `json: "runType"`
+}
+
+func (this *JobHandler) processJobsFromJSON(jhjp *JHJsonParser) error {
+	var job_tracker sync.WaitGroup
+	for i := range jhjp.DependentJobs {
+		job_tracker.Add(1)
+		job := jhjp.DependentJobs[i]
+		go func() {
+			this.processJobsFromJSON(job)
+			job_tracker.Done()
+		}()
+	}
+	job_tracker.Wait()
+
+	this.AddJob(jhjp.Job)
+	return nil
+}
+
+func (this *JobHandler) ProcessJobsFromJSON(filename string) error {
+	file_data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		logger.Error.Print(err)
+		return err
+	}
+
+	var jhjp JHJsonParser
+	if err := json.Unmarshal(file_data, &jhjp); err != nil {
+		return err
+	}
+
+	if err = this.processJobsFromJSON(&jhjp); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (this *JobHandler) WaitForJobsToComplete() {
@@ -103,6 +135,7 @@ func (this *JobHandler) waitForResults(print_results bool) {
 		if result != nil && print_results == true {
 			logger.Info.Println(result)
 		}
+		this.Results = append(this.Results, result)
 	}
 	this.ws_job_tracker.Done()
 	logger.Trace.Println("done processing results")
