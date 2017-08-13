@@ -11,32 +11,27 @@ import (
 	"github.com/akundu/utilities/logger"
 )
 
-type Response interface{}
-type Request interface{}
-type Worker interface {
-	PreRun()
-	PostRun()
-	Run(id int, jobs <-chan Request, results chan<- Response)
-}
-type CreateWorkerFunction func() Worker
-
 type JobHandler struct {
-	jobs           chan Request
-	results        chan Response
-	ws_job_tracker sync.WaitGroup
-	num_added      int
-	done_adding    bool
-	worker_list    []Worker
-	Results        []interface{}
+	jobs                chan Request
+	results             chan Response
+	ws_job_tracker      sync.WaitGroup
+	num_added           int
+	done_adding         bool
+	worker_list         []Worker
+
+	Results             []interface{}
 }
 
-func NewJobHandler(num_to_setup int, createWorkerFunc CreateWorkerFunction, print_results bool) *JobHandler {
+func NewJobHandler(num_to_setup int,
+	createWorkerFunc CreateWorkerFunction,
+	print_results bool,
+	) *JobHandler {
 	jh := &JobHandler{
-		jobs:        make(chan Request, num_to_setup),
-		results:     make(chan Response, num_to_setup),
-		num_added:   0,
-		worker_list: make([]Worker, num_to_setup),
-		done_adding: false,
+		jobs:                make(chan Request, num_to_setup),
+		results:             make(chan Response, num_to_setup),
+		num_added:           0,
+		worker_list:         make([]Worker, num_to_setup),
+		done_adding:         false,
 	}
 
 	for w := 0; w < num_to_setup; w++ {
@@ -87,18 +82,12 @@ func (this *JobHandler) GetJobsFromStdin(jhlo JobHandlerLineOutputFilter) {
 	}
 }
 
-type JHJsonParser struct {
-	DependentJobs []*JHJsonParser `json: "dependentJobs"`
-	Job           string          `json: "job"`
-	Name          string          `json: "name"`
-	RunType       string          `json: "runType"`
-}
-
-func (this *JobHandler) processJobsFromJSON(jhjp *JHJsonParser) error {
+//func (this *JobHandler) processJobsFromJSON(jhjp ParserObject) error {
+func (this *JobHandler) processJobsFromJSON(jhjp *JHJSONParserString) error {
 	var job_tracker sync.WaitGroup
-	for i := range jhjp.DependentJobs {
+	for i := range jhjp.GetDependentJobs() {
 		job_tracker.Add(1)
-		job := jhjp.DependentJobs[i]
+		job := jhjp.GetDependentJobs()[i]
 		go func() {
 			this.processJobsFromJSON(job)
 			job_tracker.Done()
@@ -106,10 +95,11 @@ func (this *JobHandler) processJobsFromJSON(jhjp *JHJsonParser) error {
 	}
 	job_tracker.Wait()
 
-	this.AddJob(jhjp.Job)
+	this.AddJob(jhjp.GetJob())
 	return nil
 }
 
+//func (this *JobHandler) ProcessJobsFromJSON(filename string, parserObjectCreator CreateParserObjectFunc) error {
 func (this *JobHandler) ProcessJobsFromJSON(filename string) error {
 	file_data, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -117,14 +107,21 @@ func (this *JobHandler) ProcessJobsFromJSON(filename string) error {
 		return err
 	}
 
-	var jhjp JHJsonParser
-	if err := json.Unmarshal(file_data, &jhjp); err != nil {
+	/*
+	if parserObjectCreator == nil {
+		return utilities.NewBasicError("parserObjectCreator has to be provided")
+	}
+	*/
+
+	//obj_to_use := parserObjectCreator()
+	obj_to_use := CreateJHJSONParserString()
+	if err := json.Unmarshal(file_data, obj_to_use); err != nil {
+		return err
+	}
+	if err = this.processJobsFromJSON(obj_to_use); err != nil {
 		return err
 	}
 
-	if err = this.processJobsFromJSON(&jhjp); err != nil {
-		return err
-	}
 	return nil
 }
 
