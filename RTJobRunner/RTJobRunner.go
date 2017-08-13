@@ -95,7 +95,12 @@ func (this *JobHandler) processJobsFromJSON(jhjp *JHJSONParserString) error {
 	}
 	job_tracker.Wait()
 
-	this.AddJob(jhjp.GetJob())
+	if(jhjp.NumIterations == 0) {
+		jhjp.NumIterations = 1
+	}
+	for i := 0 ; i < jhjp.NumIterations ; i++{
+		this.AddJob(jhjp.GetJob())
+	}
 	return nil
 }
 
