@@ -1,0 +1,18 @@
+{
+    "dependentJobs" : [
+        {
+            "job" : "world",
+            "name" : "world"
+        },
+        {
+            "job" : "test1",
+            "name" : "test1"
+        },
+        {
+            "job" : "test2",
+            "name" : "test2"
+        }
+    ],
+    "job" : "hello",
+    "name" : "print job"
+}
