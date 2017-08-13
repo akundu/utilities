@@ -15,8 +15,10 @@ type Response interface{}
 type Request interface{}
 type Worker interface {
 	PreRun()
+	PostRun()
 	Run(id int, jobs <-chan Request, results chan<- Response)
 }
+type CreateWorkerFunction func() Worker
 
 type JobHandler struct {
 	jobs           chan Request
@@ -24,19 +26,22 @@ type JobHandler struct {
 	ws_job_tracker sync.WaitGroup
 	num_added      int
 	done_adding    bool
-	worker         Worker
+	worker_list    []Worker
 	Results        []interface{}
 }
 
-func NewJobHandler(num_to_setup int, worker Worker, print_results bool) *JobHandler {
+func NewJobHandler(num_to_setup int, createWorkerFunc CreateWorkerFunction, print_results bool) *JobHandler {
 	jh := &JobHandler{
 		jobs:        make(chan Request, num_to_setup),
 		results:     make(chan Response, num_to_setup),
 		num_added:   0,
+		worker_list: make([]Worker, num_to_setup),
 		done_adding: false,
 	}
 
 	for w := 0; w < num_to_setup; w++ {
+		worker := createWorkerFunc()
+		jh.worker_list[w] = worker
 		worker.PreRun()
 		go worker.Run(w, jh.jobs, jh.results)
 	}
@@ -139,6 +144,11 @@ func (this *JobHandler) waitForResults(print_results bool) {
 	}
 	this.ws_job_tracker.Done()
 	logger.Trace.Println("done processing results")
+
+	//clean up the workers if needed
+	for i := range this.worker_list {
+		this.worker_list[i].PostRun()
+	}
 }
 
 func (this *JobHandler) DoneAddingJobs() {

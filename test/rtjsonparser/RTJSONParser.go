@@ -14,6 +14,12 @@ import (
 type worker struct {
 }
 
+func CreateWorker() RTJobRunner.Worker {
+	return &worker{}
+}
+
+func (this *worker) PostRun() {
+}
 func (this *worker) PreRun() {
 }
 func (this *worker) Run(id int, jobs <-chan RTJobRunner.Request, results chan<- RTJobRunner.Response) {
@@ -28,7 +34,7 @@ func (this *worker) Run(id int, jobs <-chan RTJobRunner.Request, results chan<- 
 }
 
 func main() {
-	jh := RTJobRunner.NewJobHandler(*num_simultaneously_to_run_ptr, &worker{}, false)
+	jh := RTJobRunner.NewJobHandler(*num_simultaneously_to_run_ptr, CreateWorker, false)
 	if err := jh.ProcessJobsFromJSON(*json_file_ptr); err != nil {
 		logger.Error.Println(err)
 		return
