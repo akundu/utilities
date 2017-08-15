@@ -7,17 +7,24 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"fmt"
+	"sync/atomic"
 
 	"github.com/akundu/utilities/logger"
+    "github.com/satori/go.uuid"
 )
 
 type JobHandler struct {
 	jobs                chan Request
 	results             chan Response
 	ws_job_tracker      sync.WaitGroup
-	num_added           int
+	num_added           int32
+
 	done_adding         bool
+	done_channel        chan bool
+
 	worker_list         []Worker
+	id                  string
 
 	Results             []interface{}
 }
@@ -26,12 +33,15 @@ func NewJobHandler(num_to_setup int,
 	createWorkerFunc CreateWorkerFunction,
 	print_results bool,
 	) *JobHandler {
+
 	jh := &JobHandler{
 		jobs:                make(chan Request, num_to_setup),
 		results:             make(chan Response, num_to_setup),
 		num_added:           0,
 		worker_list:         make([]Worker, num_to_setup),
 		done_adding:         false,
+		done_channel:        make(chan bool, 1),
+		id:                  fmt.Sprintf("%s", uuid.NewV4()),
 	}
 
 	for w := 0; w < num_to_setup; w++ {
@@ -41,7 +51,7 @@ func NewJobHandler(num_to_setup int,
 		go worker.Run(w, jh.jobs, jh.results)
 	}
 
-	jh.ws_job_tracker.Add(1)
+	jh.ws_job_tracker.Add(1) //goroutine to wait for results
 	go jh.waitForResults(print_results)
 
 	return jh
@@ -49,7 +59,8 @@ func NewJobHandler(num_to_setup int,
 
 func (this *JobHandler) AddJob(job Request) {
 	this.jobs <- job
-	this.num_added++
+	atomic.AddInt32(&this.num_added, 1)
+	logger.Info.Println("jh: ", this.id, " added job ", atomic.LoadInt32(&this.num_added))
 }
 
 type JobHandlerLineOutputFilter func(string) Request //line - outputline - if outputline is empty - dont add anything
@@ -98,7 +109,7 @@ func (this *JobHandler) processJobsFromJSON(jhjp *JHJSONParserString) error {
 	if(jhjp.NumIterations == 0) {
 		jhjp.NumIterations = 1
 	}
-	for i := 0 ; i < jhjp.NumIterations ; i++{
+	for i := 0 ; i < jhjp.NumIterations ; i++ {
 		this.AddJob(jhjp)
 	}
 	return nil
@@ -135,28 +146,36 @@ func (this *JobHandler) WaitForJobsToComplete() {
 }
 
 func (this *JobHandler) waitForResults(print_results bool) {
-	num_processed := 0
-	for this.done_adding == false || num_processed < this.num_added {
-		result := <-this.results
-		num_processed++
-		if result != nil && print_results == true {
-			logger.Info.Println(result)
+	var num_processed int32 = 0
+	for this.done_adding == false || num_processed < atomic.LoadInt32(&this.num_added) {
+		select {
+		case result := <-this.results:
+			num_processed++
+			logger.Info.Println("JH: ", this.id , " processed " , num_processed, "/", atomic.LoadInt32(&this.num_added))
+
+			if result != nil && print_results == true {
+				logger.Info.Println(result)
+			}
+			this.Results = append(this.Results, result)
+		case <-this.done_channel:
+			continue
 		}
-		this.Results = append(this.Results, result)
 	}
-	this.ws_job_tracker.Done()
-	logger.Trace.Println("done processing results")
+	logger.Info.Println("done processing results")
 
 	//clean up the workers if needed
 	for i := range this.worker_list {
 		this.worker_list[i].PostRun()
 	}
+
+	this.ws_job_tracker.Done()
 }
 
 func (this *JobHandler) DoneAddingJobs() {
 	close(this.jobs)
-	if this.num_added == 0 {
+	if atomic.LoadInt32(&this.num_added) == 0 {
 		close(this.results)
 	}
 	this.done_adding = true
+	this.done_channel <- true
 }

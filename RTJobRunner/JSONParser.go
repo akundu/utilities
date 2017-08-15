@@ -15,7 +15,7 @@ type JHJSONParserString struct {
 	DependentJobs []*JHJSONParserString `json: "dependentJobs"`
 	Job           string          `json: "job"`
 	Name          string          `json: "name"`
-	NumIterations int          `json: "num_iterations"`
+	NumIterations int          `json: "numIterations"`
 }
 
 func (this JHJSONParserString) GetDependentJobs() []*JHJSONParserString {
