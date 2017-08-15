@@ -20,7 +20,6 @@ type JobHandler struct {
 	ws_job_tracker      sync.WaitGroup
 	num_added           int32
 
-	done_adding         bool
 	done_channel        chan bool
 
 	worker_list         []Worker
@@ -39,7 +38,6 @@ func NewJobHandler(num_to_setup int,
 		results:             make(chan Response, num_to_setup),
 		num_added:           0,
 		worker_list:         make([]Worker, num_to_setup),
-		done_adding:         false,
 		done_channel:        make(chan bool, 1),
 		id:                  fmt.Sprintf("%s", uuid.NewV4()),
 	}
@@ -60,7 +58,6 @@ func NewJobHandler(num_to_setup int,
 func (this *JobHandler) AddJob(job Request) {
 	this.jobs <- job
 	atomic.AddInt32(&this.num_added, 1)
-	logger.Info.Println("jh: ", this.id, " added job ", atomic.LoadInt32(&this.num_added))
 }
 
 type JobHandlerLineOutputFilter func(string) Request //line - outputline - if outputline is empty - dont add anything
@@ -147,17 +144,16 @@ func (this *JobHandler) WaitForJobsToComplete() {
 
 func (this *JobHandler) waitForResults(print_results bool) {
 	var num_processed int32 = 0
-	for this.done_adding == false || num_processed < atomic.LoadInt32(&this.num_added) {
+	done_adding := false
+	for done_adding == false || num_processed < atomic.LoadInt32(&this.num_added) {
 		select {
 		case result := <-this.results:
 			num_processed++
-			logger.Info.Println("JH: ", this.id , " processed " , num_processed, "/", atomic.LoadInt32(&this.num_added))
-
 			if result != nil && print_results == true {
 				logger.Info.Println(result)
 			}
 			this.Results = append(this.Results, result)
-		case <-this.done_channel:
+		case done_adding = <-this.done_channel:
 			continue
 		}
 	}
@@ -176,6 +172,5 @@ func (this *JobHandler) DoneAddingJobs() {
 	if atomic.LoadInt32(&this.num_added) == 0 {
 		close(this.results)
 	}
-	this.done_adding = true
 	this.done_channel <- true
 }
