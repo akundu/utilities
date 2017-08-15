@@ -157,7 +157,7 @@ func (this *JobHandler) waitForResults(print_results bool) {
 			continue
 		}
 	}
-	logger.Info.Println("done processing results")
+	logger.Trace.Println("done processing results")
 
 	//clean up the workers if needed
 	for i := range this.worker_list {
