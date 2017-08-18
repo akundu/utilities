@@ -13,6 +13,7 @@ type CreateParserObjectFunc func() ParserObject
 
 type JHJSONParserString struct {
 	PostJobs []*JHJSONParserString `json: "postJobs"`
+	PreJobs []*JHJSONParserString `json: "preJobs"`
 	Job           string          `json: "job"`
 	Name          string          `json: "name"`
 	NumIterations int          `json: "numIterations"`
@@ -20,6 +21,9 @@ type JHJSONParserString struct {
 
 func (this JHJSONParserString) GetPostJobs() []*JHJSONParserString {
 	return this.PostJobs
+}
+func (this JHJSONParserString) GetPreJobs() []*JHJSONParserString {
+	return this.PreJobs
 }
 func (this JHJSONParserString) GetJob() Request {
 	return this.Job
