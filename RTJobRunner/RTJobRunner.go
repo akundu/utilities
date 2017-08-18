@@ -93,15 +93,6 @@ func (this *JobHandler) GetJobsFromStdin(jhlo JobHandlerLineOutputFilter) {
 //func (this *JobHandler) processJobsFromJSON(jhjp ParserObject) error {
 func (this *JobHandler) processJobsFromJSON(jhjp *JHJSONParserString) error {
 	var job_tracker sync.WaitGroup
-	for i := range jhjp.GetDependentJobs() {
-		job_tracker.Add(1)
-		job := jhjp.GetDependentJobs()[i]
-		go func() {
-			this.processJobsFromJSON(job)
-			job_tracker.Done()
-		}()
-	}
-	job_tracker.Wait()
 
 	if(jhjp.NumIterations == 0) {
 		jhjp.NumIterations = 1
@@ -109,6 +100,17 @@ func (this *JobHandler) processJobsFromJSON(jhjp *JHJSONParserString) error {
 	for i := 0 ; i < jhjp.NumIterations ; i++ {
 		this.AddJob(jhjp)
 	}
+
+	for i := range jhjp.GetPostJobs() {
+		job_tracker.Add(1)
+		job := jhjp.GetPostJobs()[i]
+		go func() {
+			this.processJobsFromJSON(job)
+			job_tracker.Done()
+		}()
+	}
+	job_tracker.Wait()
+
 	return nil
 }
 

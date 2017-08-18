@@ -1,7 +1,7 @@
 package RTJobRunner
 
 type ParserObject interface {
-	GetDependentJobs() []ParserObject
+	GetPostJobs() []ParserObject
 	GetJob() Request
 	GetName() string
 }
@@ -12,14 +12,14 @@ type CreateParserObjectFunc func() ParserObject
 
 
 type JHJSONParserString struct {
-	DependentJobs []*JHJSONParserString `json: "dependentJobs"`
+	PostJobs []*JHJSONParserString `json: "postJobs"`
 	Job           string          `json: "job"`
 	Name          string          `json: "name"`
 	NumIterations int          `json: "numIterations"`
 }
 
-func (this JHJSONParserString) GetDependentJobs() []*JHJSONParserString {
-	return this.DependentJobs
+func (this JHJSONParserString) GetPostJobs() []*JHJSONParserString {
+	return this.PostJobs
 }
 func (this JHJSONParserString) GetJob() Request {
 	return this.Job
