@@ -2,47 +2,48 @@ package RTJobRunner
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
-	"fmt"
 	"sync/atomic"
 
-	"github.com/akundu/utilities/logger"
-    "github.com/satori/go.uuid"
 	"time"
+
+	"github.com/akundu/utilities/logger"
+	"github.com/satori/go.uuid"
 )
 
 type JobHandler struct {
-	req_chan            chan *JobInfo
-	res_chan            chan *JobInfo
+	req_chan chan *JobInfo
+	res_chan chan *JobInfo
 
-	ws_job_tracker      sync.WaitGroup
-	num_added           int32
-	num_run_simultaneously           int
-	create_worker_func  CreateWorkerFunction
-	print_results       bool
+	ws_job_tracker         sync.WaitGroup
+	num_added              int32
+	num_run_simultaneously int
+	create_worker_func     CreateWorkerFunction
+	print_results          bool
 
-	done_channel        chan bool
-	worker_list         []Worker
-	id                  string
-	err         		error
+	done_channel chan bool
+	worker_list  []Worker
+	id           string
+	err          error
 
-	Jobs             	[]*JobInfo
+	Jobs []*JobInfo
 }
 
 func NewJobHandler(num_to_setup int, createWorkerFunc CreateWorkerFunction, print_results bool) *JobHandler {
 	jh := &JobHandler{
-		req_chan:                make(chan *JobInfo, num_to_setup),
-		res_chan:             make(chan *JobInfo, num_to_setup),
-		num_run_simultaneously:           num_to_setup,
-		num_added:           0,
-		create_worker_func:  createWorkerFunc,
-		worker_list:         make([]Worker, num_to_setup),
-		done_channel:        make(chan bool, 1),
-		id:                  fmt.Sprintf("%s", uuid.NewV4()),
-		print_results:       print_results,
-		err:         nil,
+		req_chan:               make(chan *JobInfo, num_to_setup),
+		res_chan:               make(chan *JobInfo, num_to_setup),
+		num_run_simultaneously: num_to_setup,
+		num_added:              0,
+		create_worker_func:     createWorkerFunc,
+		worker_list:            make([]Worker, num_to_setup),
+		done_channel:           make(chan bool, 1),
+		id:                     fmt.Sprintf("%s", uuid.NewV4()),
+		print_results:          print_results,
+		err:                    nil,
 	}
 
 	for w := 0; w < num_to_setup; w++ {
@@ -111,16 +112,16 @@ func (this *JobHandler) waitForResults(print_results bool) {
 		select {
 		case result := <-this.res_chan:
 			num_processed++
-			if(result == nil) {
+			if result == nil {
 				continue
 			}
 			result.job_end_time = time.Now()
 
 			if print_results == true {
 				logger.Info.Printf("%dus %s %v\n",
-									int(result.JobTime()/1000),
-									result.Req.GetId(),
-									result.Resp)
+					int(result.JobTime()/1000),
+					result.Req.GetName(),
+					result.Resp)
 			}
 			this.appendResults(result)
 		case done_adding = <-this.done_channel:
