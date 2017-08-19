@@ -11,17 +11,12 @@ import (
 	"github.com/akundu/utilities"
 )
 
-type worker struct {
-}
-
+type worker struct { }
 func CreateWorker() RTJobRunner.Worker {
 	return &worker{}
 }
-
-func (this *worker) PostRun() {
-}
-func (this *worker) PreRun() {
-}
+func (this *worker) PostRun() { }
+func (this *worker) PreRun() { }
 func (this *worker) Run(id int, jobs <-chan *RTJobRunner.JobInfo, results chan<- *RTJobRunner.JobInfo) {
 	for jobInfo := range jobs {
 		job, ok := jobInfo.Req.(*RTJobRunner.JHJSONParserString)

@@ -28,7 +28,7 @@ type JobHandler struct {
 	id                  string
 	err         		error
 
-	Jobs             []*JobInfo
+	Jobs             	[]*JobInfo
 }
 
 func NewJobHandler(num_to_setup int, createWorkerFunc CreateWorkerFunction, print_results bool) *JobHandler {
@@ -76,7 +76,7 @@ func (this *JobHandler) GetJobsFromStdin(jhlo JobHandlerLineOutputFilter) {
 		line = strings.Trim(line, "\n \r\n")
 		logger.Trace.Println("adding ", line)
 		if jhlo == nil {
-			this.AddJob(NewRTRequestResultObject(line))
+			this.AddJob(NewRTRequestResultObject(&StringRequest{line}))
 		} else {
 			filtered_job := jhlo(line)
 			if filtered_job != nil {
@@ -117,7 +117,10 @@ func (this *JobHandler) waitForResults(print_results bool) {
 			result.job_end_time = time.Now()
 
 			if print_results == true {
-				logger.Info.Printf("%dus %v\n", int(result.JobTime()/1000), result.Resp)
+				logger.Info.Printf("%dus %s %v\n",
+									int(result.JobTime()/1000),
+									result.Req.GetId(),
+									result.Resp)
 			}
 			this.appendResults(result)
 		case done_adding = <-this.done_channel:

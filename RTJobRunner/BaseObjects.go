@@ -1,13 +1,27 @@
 package RTJobRunner
 
-import "time"
+import (
+	"time"
+)
 
 type Result interface { }
 type Response interface{
 	GetError() error
 	GetResult() Result
 }
-type Request interface{}
+type Request interface{
+	GetId() string
+}
+type StringRequest struct{
+	Str string
+}
+func (this StringRequest) GetId() string {
+	return this.Str
+}
+func (this StringRequest) GetStr() string {
+	return this.Str
+}
+
 
 type JobInfo struct {
 	Resp	Response
