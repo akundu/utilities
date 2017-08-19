@@ -43,7 +43,8 @@ func CreateJHJSONParserString() *JHJSONParserString {
 func processJobsFromJSON(jhjp *JHJSONParserString, jh *JobHandler) error {
 	//create a new job
 	var job_tracker_pre sync.WaitGroup
-	for _, job := range jhjp.GetPreJobs() {
+	for index := range jhjp.GetPreJobs() {
+		job := jhjp.GetPreJobs()[index]
 		job_tracker_pre.Add(1)
 		go func() {
 			processJobsFromJSON(job, jh)
@@ -80,7 +81,8 @@ func processJobsFromJSON(jhjp *JHJSONParserString, jh *JobHandler) error {
 
 	//Run the post jobs
 	var job_tracker_post sync.WaitGroup
-	for _, job := range jhjp.GetPostJobs() {
+	for index := range jhjp.GetPostJobs() {
+		job := jhjp.GetPostJobs()[index]
 		job_tracker_post.Add(1)
 		go func() {
 			processJobsFromJSON(job, jh)
