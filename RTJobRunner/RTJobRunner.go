@@ -2,8 +2,6 @@ package RTJobRunner
 
 import (
 	"bufio"
-	"encoding/json"
-	"io/ioutil"
 	"os"
 	"strings"
 	"sync"
@@ -12,41 +10,46 @@ import (
 
 	"github.com/akundu/utilities/logger"
     "github.com/satori/go.uuid"
+	"time"
 )
 
 type JobHandler struct {
-	jobs                chan Request
-	results             chan Response
+	req_chan            chan *JobInfo
+	res_chan            chan *JobInfo
+
 	ws_job_tracker      sync.WaitGroup
 	num_added           int32
+	num_run_simultaneously           int
+	create_worker_func  CreateWorkerFunction
+	print_results       bool
 
 	done_channel        chan bool
-
 	worker_list         []Worker
 	id                  string
+	err         		error
 
-	Results             []interface{}
+	Jobs             []*JobInfo
 }
 
-func NewJobHandler(num_to_setup int,
-	createWorkerFunc CreateWorkerFunction,
-	print_results bool,
-	) *JobHandler {
-
+func NewJobHandler(num_to_setup int, createWorkerFunc CreateWorkerFunction, print_results bool) *JobHandler {
 	jh := &JobHandler{
-		jobs:                make(chan Request, num_to_setup),
-		results:             make(chan Response, num_to_setup),
+		req_chan:                make(chan *JobInfo, num_to_setup),
+		res_chan:             make(chan *JobInfo, num_to_setup),
+		num_run_simultaneously:           num_to_setup,
 		num_added:           0,
+		create_worker_func:  createWorkerFunc,
 		worker_list:         make([]Worker, num_to_setup),
 		done_channel:        make(chan bool, 1),
 		id:                  fmt.Sprintf("%s", uuid.NewV4()),
+		print_results:       print_results,
+		err:         nil,
 	}
 
 	for w := 0; w < num_to_setup; w++ {
 		worker := createWorkerFunc()
 		jh.worker_list[w] = worker
 		worker.PreRun()
-		go worker.Run(w, jh.jobs, jh.results)
+		go worker.Run(w, jh.req_chan, jh.res_chan)
 	}
 
 	jh.ws_job_tracker.Add(1) //goroutine to wait for results
@@ -55,8 +58,9 @@ func NewJobHandler(num_to_setup int,
 	return jh
 }
 
-func (this *JobHandler) AddJob(job Request) {
-	this.jobs <- job
+func (this *JobHandler) AddJob(job *JobInfo) {
+	job.job_start_time = time.Now()
+	this.req_chan <- job
 	atomic.AddInt32(&this.num_added, 1)
 }
 
@@ -72,11 +76,11 @@ func (this *JobHandler) GetJobsFromStdin(jhlo JobHandlerLineOutputFilter) {
 		line = strings.Trim(line, "\n \r\n")
 		logger.Trace.Println("adding ", line)
 		if jhlo == nil {
-			this.AddJob(line)
+			this.AddJob(NewRTRequestResultObject(line))
 		} else {
 			filtered_job := jhlo(line)
 			if filtered_job != nil {
-				this.AddJob(filtered_job)
+				this.AddJob(NewRTRequestResultObject(filtered_job))
 			}
 		}
 	}
@@ -85,88 +89,37 @@ func (this *JobHandler) GetJobsFromStdin(jhlo JobHandlerLineOutputFilter) {
 	if jhlo != nil {
 		filtered_job := jhlo("")
 		if filtered_job != nil {
-			this.AddJob(filtered_job)
+			this.AddJob(NewRTRequestResultObject(filtered_job))
 		}
 	}
-}
-
-//func (this *JobHandler) processJobsFromJSON(jhjp ParserObject) error {
-func (this *JobHandler) processJobsFromJSON(jhjp *JHJSONParserString) error {
-
-	var job_tracker_pre sync.WaitGroup
-	for i := range jhjp.GetPreJobs() {
-		job_tracker_pre.Add(1)
-		job := jhjp.GetPreJobs()[i]
-		go func() {
-			this.processJobsFromJSON(job)
-			job_tracker_pre.Done()
-		}()
-	}
-	job_tracker_pre.Wait()
-
-
-	if(jhjp.NumIterations == 0) {
-		jhjp.NumIterations = 1
-	}
-	for i := 0 ; i < jhjp.NumIterations ; i++ {
-		this.AddJob(jhjp)
-	}
-
-	var job_tracker_post sync.WaitGroup
-	for i := range jhjp.GetPostJobs() {
-		job_tracker_post.Add(1)
-		job := jhjp.GetPostJobs()[i]
-		go func() {
-			this.processJobsFromJSON(job)
-			job_tracker_post.Done()
-		}()
-	}
-	job_tracker_post.Wait()
-
-	return nil
-}
-
-//func (this *JobHandler) ProcessJobsFromJSON(filename string, parserObjectCreator CreateParserObjectFunc) error {
-func (this *JobHandler) ProcessJobsFromJSON(filename string) error {
-	file_data, err := ioutil.ReadFile(filename)
-	if err != nil {
-		logger.Error.Print(err)
-		return err
-	}
-
-	/*
-	if parserObjectCreator == nil {
-		return utilities.NewBasicError("parserObjectCreator has to be provided")
-	}
-	*/
-
-	//obj_to_use := parserObjectCreator()
-	obj_to_use := CreateJHJSONParserString()
-	if err := json.Unmarshal(file_data, obj_to_use); err != nil {
-		return err
-	}
-	if err = this.processJobsFromJSON(obj_to_use); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (this *JobHandler) WaitForJobsToComplete() {
 	this.ws_job_tracker.Wait()
 }
 
+func (this *JobHandler) appendResults(r *JobInfo) {
+	this.Jobs = append(this.Jobs, r)
+	if r.Resp.GetError() != nil {
+		this.err = r.Resp.GetError()
+	}
+}
 func (this *JobHandler) waitForResults(print_results bool) {
 	var num_processed int32 = 0
 	done_adding := false
 	for done_adding == false || num_processed < atomic.LoadInt32(&this.num_added) {
 		select {
-		case result := <-this.results:
+		case result := <-this.res_chan:
 			num_processed++
-			if result != nil && print_results == true {
-				logger.Info.Println(result)
+			if(result == nil) {
+				continue
 			}
-			this.Results = append(this.Results, result)
+			result.job_end_time = time.Now()
+
+			if print_results == true {
+				logger.Info.Printf("%dus %v\n", int(result.JobTime()/1000), result.Resp)
+			}
+			this.appendResults(result)
 		case done_adding = <-this.done_channel:
 			continue
 		}
@@ -182,9 +135,9 @@ func (this *JobHandler) waitForResults(print_results bool) {
 }
 
 func (this *JobHandler) DoneAddingJobs() {
-	close(this.jobs)
+	close(this.req_chan)
 	if atomic.LoadInt32(&this.num_added) == 0 {
-		close(this.results)
+		close(this.res_chan)
 	}
 	this.done_channel <- true
 }

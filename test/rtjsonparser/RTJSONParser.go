@@ -2,13 +2,13 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"runtime"
 
 	"github.com/akundu/utilities/RTJobRunner"
 	"github.com/akundu/utilities/logger"
+	"github.com/akundu/utilities"
 )
 
 type worker struct {
@@ -22,21 +22,29 @@ func (this *worker) PostRun() {
 }
 func (this *worker) PreRun() {
 }
-func (this *worker) Run(id int, jobs <-chan RTJobRunner.Request, results chan<- RTJobRunner.Response) {
-	for j := range jobs {
-		job, ok := j.(*RTJobRunner.JHJSONParserString)
+func (this *worker) Run(id int, jobs <-chan *RTJobRunner.JobInfo, results chan<- *RTJobRunner.JobInfo) {
+	for jobInfo := range jobs {
+		job, ok := jobInfo.Req.(*RTJobRunner.JHJSONParserString)
 		if ok == false {
-			results <- nil
+			jobInfo.Resp = &RTJobRunner.BasicResponseResult{
+				Err : utilities.NewBasicError("object cant cast properly"),
+				Result : nil,
+			}
+			results <- jobInfo
 			logger.Error.Printf("got error while processing %v\n", job)
 			continue
 		}
-		results <- job.GetJob()
+		jobInfo.Resp = &RTJobRunner.BasicResponseResult{
+			Err : nil,
+			Result : job.GetJob(),
+		}
+		results <- jobInfo
 	}
 }
 
 func main() {
-	jh := RTJobRunner.NewJobHandler(*num_simultaneously_to_run_ptr, CreateWorker, false)
-	if err := jh.ProcessJobsFromJSON(*json_file_ptr); err != nil {
+	jh := RTJobRunner.NewJobHandler(*num_simultaneously_to_run_ptr, CreateWorker, *print_results_ptr)
+	if err := RTJobRunner.ProcessJobsFromJSON(*json_file_ptr, jh); err != nil {
 		logger.Error.Println(err)
 		return
 	}
@@ -45,17 +53,17 @@ func main() {
 	//wait for the results
 	jh.WaitForJobsToComplete()
 
+	/*
 	//print results
-	for i := range jh.Results {
-		if r, ok := jh.Results[i].(string); ok {
-			fmt.Println(r)
-		}
+	for i := range jh.Jobs {
+		fmt.Println(jh.Jobs[i].Resp)
 	}
+	*/
 }
 
 var (
 	num_simultaneously_to_run_ptr = flag.Int("p", 1, "num times to run action")
-	print_results_ptr             = flag.Int("v", 0, "print results")
+	print_results_ptr             = flag.Bool("v", false, "print results")
 	json_file_ptr                 = flag.String("f", "", "json file to load jobs from")
 )
 
