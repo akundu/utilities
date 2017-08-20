@@ -19,7 +19,7 @@ func (this *worker) PostRun() { }
 func (this *worker) PreRun() { }
 func (this *worker) Run(id int, jobs <-chan *RTJobRunner.JobInfo, results chan<- *RTJobRunner.JobInfo) {
 	for jobInfo := range jobs {
-		job, ok := jobInfo.Req.(*RTJobRunner.JHJSONParserString)
+		job, ok := jobInfo.Req.(*RTJobRunner.JSONJobProcessor)
 		if ok == false {
 			jobInfo.Resp = &RTJobRunner.BasicResponseResult{
 				Err : utilities.NewBasicError("object cant cast properly"),
@@ -31,15 +31,15 @@ func (this *worker) Run(id int, jobs <-chan *RTJobRunner.JobInfo, results chan<-
 		}
 		jobInfo.Resp = &RTJobRunner.BasicResponseResult{
 			Err : nil,
-			Result : job.GetJob().CommandToExecute,
+			Result : job.CommandToExecute,
 		}
 		results <- jobInfo
 	}
 }
 
 func main() {
-	jh := RTJobRunner.NewJobHandler(*num_simultaneously_to_run_ptr, CreateWorker, *print_results_ptr)
-	if err := RTJobRunner.ProcessJobsFromJSON(*json_file_ptr, jh); err != nil {
+	jh := RTJobRunner.NewJobHandler(1, CreateWorker, *print_results_ptr)
+	if err := RTJobRunner.ProcessJobsFromJSON(*json_file_ptr, jh, *num_simultaneously_to_run_ptr); err != nil {
 		logger.Error.Println(err)
 		return
 	}

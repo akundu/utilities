@@ -12,16 +12,22 @@ type Response interface {
 type Request interface {
 	GetName() string
 }
+
+
+
 type StringRequest struct {
 	Str string
 }
-
 func (this StringRequest) GetName() string {
 	return this.Str
 }
 func (this StringRequest) GetStr() string {
 	return this.Str
 }
+
+
+
+
 
 type JobInfo struct {
 	Resp Response
@@ -30,11 +36,9 @@ type JobInfo struct {
 	job_start_time time.Time
 	job_end_time   time.Time
 }
-
 func (this JobInfo) JobTime() time.Duration {
 	return this.job_end_time.Sub(this.job_start_time)
 }
-
 func NewRTRequestResultObject(req Request) *JobInfo {
 	return &JobInfo{
 		Req:  req,
@@ -42,17 +46,24 @@ func NewRTRequestResultObject(req Request) *JobInfo {
 	}
 }
 
+
+
+
+
 type BasicResponseResult struct {
 	Err    error
 	Result Result
 }
-
 func (this BasicResponseResult) GetError() error {
 	return this.Err
 }
 func (this BasicResponseResult) GetResult() Result {
 	return this.Result
 }
+
+
+
+
 
 type Worker interface {
 	PreRun()
