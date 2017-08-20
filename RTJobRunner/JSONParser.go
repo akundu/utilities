@@ -8,10 +8,28 @@ import (
 	"github.com/akundu/utilities/logger"
 )
 
+type SubstituteData struct {
+	NumToGenerate int    `json: "numToGenerate,omitempty"`
+	Type          string `json: "type,omitempty"` //can be "int|string"
+}
+
+type JSONFields struct {
+	AdditionalStatements []string          `json:"additionalStatements,omitempty"`
+	ExtraFields          map[string]string `json:"extraFields,omitempty"`
+}
+type JSONCommands struct {
+	CommandToExecute string                     `json:"commandToExecute"`
+	Substitutes      map[string]*SubstituteData `json:"substitutes,omitempty"`
+}
+type JSONJob struct {
+	JSONCommands
+	JSONFields
+}
+
 type JHJSONParserString struct {
 	PostJobs      []*JHJSONParserString `json: "postJobs"`
 	PreJobs       []*JHJSONParserString `json: "preJobs"`
-	Job           string                `json: "job"`
+	Job           *JSONJob                `json: "job"`
 	Name          string                `json: "name"`
 	NumIterations int                   `json: "numIterations"`
 	Attributes    map[string]string     `json: "attributes"`
@@ -23,15 +41,15 @@ func (this JHJSONParserString) GetPostJobs() []*JHJSONParserString {
 func (this JHJSONParserString) GetPreJobs() []*JHJSONParserString {
 	return this.PreJobs
 }
-func (this JHJSONParserString) GetJob() string {
+func (this JHJSONParserString) GetJob() *JSONJob {
 	return this.Job
 }
 func (this JHJSONParserString) GetName() string {
 	if len(this.Name) > 0 {
 		return this.Name
 	}
-	if len(this.Job) > 0 {
-		return this.Job
+	if len(this.Job.CommandToExecute) > 0 {
+		return this.Job.CommandToExecute
 	}
 	return ""
 }

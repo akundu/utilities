@@ -31,7 +31,7 @@ func (this *worker) Run(id int, jobs <-chan *RTJobRunner.JobInfo, results chan<-
 		}
 		jobInfo.Resp = &RTJobRunner.BasicResponseResult{
 			Err : nil,
-			Result : job.GetJob(),
+			Result : job.GetJob().CommandToExecute,
 		}
 		results <- jobInfo
 	}
