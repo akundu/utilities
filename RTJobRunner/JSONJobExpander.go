@@ -7,6 +7,8 @@ import (
 	"os"
 	"math/rand"
 	"github.com/akundu/utilities/statistics/distribution"
+	"regexp"
+	"log"
 )
 
 type KV struct {
@@ -36,6 +38,7 @@ func (this JSONJobProcessor) GetName() string {
 	return this.CommandToExecute
 }
 
+var template_expanders_regex *regexp.Regexp = nil
 func add_jobs(jhjp *JSONJobContainer, json_jobs *JobHandler) error {
 	json_job := jhjp.Job
 	t, err := template.New(jhjp.GetName()).Parse(json_job.CommandToExecute)
@@ -43,14 +46,24 @@ func add_jobs(jhjp *JSONJobContainer, json_jobs *JobHandler) error {
 		return err
 	}
 
+
 	//create the results for each of the cases
 	//1. get the list of keys
-	keys := make([]string, len(json_job.Substitutes))
-	var i int = 0
-	for k := range json_job.Substitutes {
-		keys[i] = k
-		i++
+	res := template_expanders_regex.FindAllStringSubmatch(json_job.CommandToExecute, -1)
+	if len(res) == 0 { //didnt find anything to expand - simply add the job as it exists
+		json_jobs.AddJob(NewRTRequestResultObject(
+			&JSONJobProcessor{
+				Name:			  jhjp.GetName(),
+				CommandToExecute: json_job.CommandToExecute,
+				JSONFields:       json_job.JSONFields,
+			}))
+		return nil
 	}
+	keys := make([]string, len(res))
+	for i, match := range(res) {
+		keys[i] = match[1]
+	}
+
 	//2. initialize some params
 	path := make([]*KV, 0, 10)
 	f_results := make([]map[string]string, 0, 10)
@@ -58,8 +71,9 @@ func add_jobs(jhjp *JSONJobContainer, json_jobs *JobHandler) error {
 	expandSubstitutes(keys, 0, json_job.Substitutes, path, &f_results)
 	//4. template expand and start the job
 	lcw := bytes.NewBufferString("")
-	for i = range f_results {
-		t.Execute(lcw, f_results[i]) //expand the template
+	for _, temp := range f_results {
+		//t.Execute(lcw, f_results[i]) //expand the template
+		t.Execute(lcw, temp)
 		json_jobs.AddJob(NewRTRequestResultObject(
 			&JSONJobProcessor{
 				Name:			  jhjp.GetName(),
@@ -79,6 +93,11 @@ func expandSubstitutes(keys []string,
 	path []*KV, //array of an object of
 	result *[]map[string]string) {
 
+	//for i,data := range(path) {
+	//	fmt.Printf("%d:%v ", i, data)
+	//}
+	//fmt.Println()
+
 	if index == len(keys) {
 		//take the path till now and generate the data out of that
 		obj_to_return := make(map[string]string)
@@ -95,7 +114,11 @@ func expandSubstitutes(keys []string,
 		return
 	}
 
-	kv_info := substitutes[keys[index]]
+
+	kv_info, ok := substitutes[keys[index]]
+	if(ok == false) {
+		return
+	}
 	uniform_distr := distribution.NewuniformGenerator(kv_info.Lower, kv_info.Upper)
 	gaussian_distr := distribution.NewgaussianGenerator(kv_info.Lower, kv_info.Upper, kv_info.NumToGenerate)
 
@@ -110,14 +133,19 @@ func expandSubstitutes(keys []string,
 			key:   keys[index],
 			value: val,
 		})
+
 		expandSubstitutes(keys, index+1, substitutes, path, result)
 		//pop from path
 		path = path[:len(path)-1]
 	}
-
 	return
 }
 
 func init() {
 	rand.Seed(int64(os.Getpid()))
+
+	var err error
+	if template_expanders_regex, err = regexp.Compile(`{{\.([0-9a-zA-Z]+)}}`); err != nil {
+		log.Fatal("couldnt create regex obj for template_expanders")
+	}
 }
