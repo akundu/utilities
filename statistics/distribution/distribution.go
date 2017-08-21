@@ -6,6 +6,7 @@ import (
 	"time"
 
 	rng "github.com/leesper/go_rng"
+	"math/rand"
 )
 
 type uniformGenerator struct {
@@ -66,6 +67,9 @@ func (this *gaussianGenerator) buildNumbers(num_to_generate int) {
 }
 func (this gaussianGenerator) GenerateNumbers() []int {
 	return this._sorted_result
+}
+func (this gaussianGenerator) GenerateNumber() int {
+	return this._sorted_result[rand.Int63n(int64(len(this._sorted_result)))]
 }
 
 func mappingValues(num, old_min, old_max, new_min, new_max int) int {

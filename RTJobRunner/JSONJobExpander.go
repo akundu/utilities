@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"bytes"
 	"text/template"
+	"os"
+	"math/rand"
+	"github.com/akundu/utilities/statistics/distribution"
 )
 
 type KV struct {
@@ -79,8 +82,7 @@ func expandSubstitutes(keys []string,
 	if index == len(keys) {
 		//take the path till now and generate the data out of that
 		obj_to_return := make(map[string]string)
-		for i := range path {
-			path_obj := path[i]
+		for _, path_obj := range path {
 			kv_info := substitutes[path_obj.key]
 
 			if kv_info.Type == "string" {
@@ -94,10 +96,19 @@ func expandSubstitutes(keys []string,
 	}
 
 	kv_info := substitutes[keys[index]]
+	uniform_distr := distribution.NewuniformGenerator(kv_info.Lower, kv_info.Upper)
+	gaussian_distr := distribution.NewgaussianGenerator(kv_info.Lower, kv_info.Upper, kv_info.NumToGenerate)
+
 	for i := 0; i < kv_info.NumToGenerate; i++ {
+		val := i
+		if(kv_info.Type == "random") {
+			val = uniform_distr.GenerateNumber()
+		} else if (kv_info.Type == "gaussian") {
+			val = gaussian_distr.GenerateNumber()
+		}
 		path = append(path, &KV{
 			key:   keys[index],
-			value: i,
+			value: val,
 		})
 		expandSubstitutes(keys, index+1, substitutes, path, result)
 		//pop from path
@@ -105,4 +116,8 @@ func expandSubstitutes(keys []string,
 	}
 
 	return
+}
+
+func init() {
+	rand.Seed(int64(os.Getpid()))
 }

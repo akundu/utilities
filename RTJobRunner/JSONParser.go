@@ -9,8 +9,10 @@ import (
 )
 
 type SubstituteData struct {
-	NumToGenerate int    `json: "numToGenerate,omitempty"`
-	Type          string `json: "type,omitempty"` //can be "int|string"
+	NumToGenerate int    	`json: "numToGenerate,omitempty"`
+	Type          string 	`json: "type,omitempty"` //can be "int|string|random|gaussian"
+	Upper         int 		`json: "upper,omitempty"`
+	Lower         int 		`json: "lower,omitempty"`
 }
 
 type JSONFields struct {
@@ -78,35 +80,39 @@ func processJobsFromJSON(jhjp *JSONJobContainer, jh *JobHandler, num_to_run_simu
 
 
 
-	//Run the current job
-	if jhjp.NumIterations == 0 {
-		jhjp.NumIterations = 1
-	}
-	var got_error error = nil
-	json_jobs := NewJobHandler(num_to_run_simultaneously, jh.create_worker_func, jh.print_results)
-	for i := 0; i < jhjp.NumIterations; i++ {
-		if(len(jhjp.Job.Substitutes) == 0) {
-			json_jobs.AddJob(NewRTRequestResultObject(&JSONJobProcessor{
-				Name: jhjp.GetName(),
-				CommandToExecute: jhjp.Job.CommandToExecute,
-				JSONFields: jhjp.Job.JSONFields,
-			}))
-		} else { //we have to expand the substitutes
-			if err := add_jobs(jhjp, json_jobs); err != nil {
-				got_error = err
+	if(jhjp.Job != nil) {
+		//Run the current job
+		if jhjp.NumIterations == 0 {
+			jhjp.NumIterations = 1
+		}
+		var got_error error = nil
+		json_jobs := NewJobHandler(num_to_run_simultaneously, jh.create_worker_func, jh.print_results)
+		for i := 0; i < jhjp.NumIterations; i++ {
+			if(len(jhjp.Job.Substitutes) == 0) {
+				json_jobs.AddJob(NewRTRequestResultObject(&JSONJobProcessor{
+					Name: jhjp.GetName(),
+					CommandToExecute: jhjp.Job.CommandToExecute,
+					JSONFields: jhjp.Job.JSONFields,
+				}))
+			} else { //we have to expand the substitutes
+				if err := add_jobs(jhjp, json_jobs); err != nil {
+					got_error = err
+				}
 			}
 		}
-	}
-	json_jobs.DoneAddingJobs()
-	json_jobs.WaitForJobsToComplete()
-	for i := range json_jobs.Jobs {
-		json_job_result := json_jobs.Jobs[i]
-		jh.appendResults(json_job_result)
-	}
-	if got_error != nil {
-		return got_error
-	} else if jh.err != nil {
-		return jh.err
+		json_jobs.DoneAddingJobs()
+		json_jobs.WaitForJobsToComplete()
+		for i := range json_jobs.Jobs {
+			json_job_result := json_jobs.Jobs[i]
+			jh.appendResults(json_job_result)
+		}
+		if got_error != nil {
+			logger.Error.Println("got error 1 ", got_error)
+			return got_error
+		} else if jh.err != nil {
+			logger.Error.Println("got error ", jh.err)
+			return jh.err
+		}
 	}
 
 
