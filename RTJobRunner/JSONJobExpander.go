@@ -28,9 +28,10 @@ func print_path(path []*KV) string {
 
 type JSONJobProcessor struct {
 	Name              	string
-	CommandToExecute 	string
-	JSONFields
+	CommandToExecute    string
+	OriginalJSONJob     *JSONJob
 }
+
 func (this JSONJobProcessor) GetName() string {
 	if len(this.Name) > 0 {
 		return this.Name
@@ -41,22 +42,48 @@ func (this JSONJobProcessor) GetName() string {
 var template_expanders_regex *regexp.Regexp = nil
 func add_jobs(jhjp *JSONJobContainer, json_jobs *JobHandler) error {
 	json_job := jhjp.Job
-	t, err := template.New(jhjp.GetName()).Parse(json_job.CommandToExecute)
-	if err != nil {
-		return err
-	}
-
 
 	//create the results for each of the cases
-	//1. get the list of keys
-	res := template_expanders_regex.FindAllStringSubmatch(json_job.CommandToExecute, -1)
-	if len(res) == 0 { //didnt find anything to expand - simply add the job as it exists
+	//1. expand the substitutes - add the job, if no substitution have happened
+	f_results := ExpandSubstitutes(json_job.CommandToExecute, json_job.Substitutes)
+	if(f_results == nil) { //didnt have anything to expand, so simply add the command to execute
 		json_jobs.AddJob(NewRTRequestResultObject(
 			&JSONJobProcessor{
 				Name:			  jhjp.GetName(),
 				CommandToExecute: json_job.CommandToExecute,
-				JSONFields:       json_job.JSONFields,
+				OriginalJSONJob:  json_job,
 			}))
+		return nil
+	}
+
+	//2. template expand and start the job
+	t, err := template.New(jhjp.GetName()).Parse(json_job.CommandToExecute)
+	if err != nil {
+		return err
+	}
+	lcw := bytes.NewBufferString("")
+	for _, temp_result := range f_results {
+		//t.Execute(lcw, f_results[i]) //expand the template
+		t.Execute(lcw, temp_result)
+		json_jobs.AddJob(NewRTRequestResultObject(
+			&JSONJobProcessor{
+				Name:			  jhjp.GetName(),
+				CommandToExecute: lcw.String(),
+				OriginalJSONJob:  json_job,
+			}))
+
+		lcw.Reset()
+	}
+
+	return nil
+}
+
+
+func ExpandSubstitutes(string_to_expand string, substitutes map[string]*SubstituteData) ([]map[string]string) {
+	//1. get the list of keys
+	res := template_expanders_regex.FindAllStringSubmatch(string_to_expand, -1)
+	if len(res) == 0 { //didnt find anything to expand - simply add the job as it exists
+		return nil
 		return nil
 	}
 	keys := make([]string, len(res))
@@ -67,36 +94,18 @@ func add_jobs(jhjp *JSONJobContainer, json_jobs *JobHandler) error {
 	//2. initialize some params
 	path := make([]*KV, 0, 10)
 	f_results := make([]map[string]string, 0, 10)
-	//3. expand the substitutes
-	expandSubstitutes(keys, 0, json_job.Substitutes, path, &f_results)
-	//4. template expand and start the job
-	lcw := bytes.NewBufferString("")
-	for _, temp := range f_results {
-		//t.Execute(lcw, f_results[i]) //expand the template
-		t.Execute(lcw, temp)
-		json_jobs.AddJob(NewRTRequestResultObject(
-			&JSONJobProcessor{
-				Name:			  jhjp.GetName(),
-				CommandToExecute: lcw.String(),
-				JSONFields:       json_job.JSONFields,
-			}))
 
-		lcw.Reset()
-	}
-
-	return nil
+	//3. recursively expand the substitutes
+	expandSubstitutes(keys, 0, substitutes, path, &f_results)
+	return f_results
 }
+
 
 func expandSubstitutes(keys []string,
 	index int,
 	substitutes map[string]*SubstituteData,
 	path []*KV, //array of an object of
 	result *[]map[string]string) {
-
-	//for i,data := range(path) {
-	//	fmt.Printf("%d:%v ", i, data)
-	//}
-	//fmt.Println()
 
 	if index == len(keys) {
 		//take the path till now and generate the data out of that

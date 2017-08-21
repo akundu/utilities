@@ -92,7 +92,7 @@ func processJobsFromJSON(jhjp *JSONJobContainer, jh *JobHandler, num_to_run_simu
 				json_jobs.AddJob(NewRTRequestResultObject(&JSONJobProcessor{
 					Name: jhjp.GetName(),
 					CommandToExecute: jhjp.Job.CommandToExecute,
-					JSONFields: jhjp.Job.JSONFields,
+					OriginalJSONJob: jhjp.Job,
 				}))
 			} else { //we have to expand the substitutes
 				if err := add_jobs(jhjp, json_jobs); err != nil {

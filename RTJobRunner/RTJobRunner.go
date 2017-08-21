@@ -118,8 +118,8 @@ func (this *JobHandler) waitForResults(print_results bool) {
 			result.job_end_time = time.Now()
 
 			if print_results == true {
-				logger.Info.Printf("%dus %s %v\n",
-					int(result.JobTime()/1000),
+				logger.Info.Printf("%0.3fms %s %v\n",
+					(float64(result.JobTime())/1000000),
 					result.Req.GetName(),
 					result.Resp)
 			}
