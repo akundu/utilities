@@ -17,23 +17,24 @@ func CreateWorker() RTJobRunner.Worker {
 }
 func (this *worker) PostRun() { }
 func (this *worker) PreRun() { }
-func (this *worker) Run(id int, jobs <-chan *RTJobRunner.JobInfo, results chan<- *RTJobRunner.JobInfo) {
-	for jobInfo := range jobs {
-		job, ok := jobInfo.Req.(*RTJobRunner.JSONJobProcessor)
+func (this *worker) Run(id int, jh *RTJobRunner.JobHandler) {
+	//for jobInfo := range jobs {
+	for j := jh.GetJob(); j != nil ; j = jh.GetJob() {
+		job, ok := j.Req.(*RTJobRunner.JSONJobProcessor)
 		if ok == false {
-			jobInfo.Resp = &RTJobRunner.BasicResponseResult{
+			j.Resp = &RTJobRunner.BasicResponseResult{
 				Err : utilities.NewBasicError("object cant cast properly"),
 				Result : nil,
 			}
-			results <- jobInfo
+			jh.DoneJob(j)
 			logger.Error.Printf("got error while processing %v\n", job)
 			continue
 		}
-		jobInfo.Resp = &RTJobRunner.BasicResponseResult{
+		j.Resp = &RTJobRunner.BasicResponseResult{
 			Err : nil,
 			Result : job.CommandToExecute,
 		}
-		results <- jobInfo
+		jh.DoneJob(j)
 	}
 }
 

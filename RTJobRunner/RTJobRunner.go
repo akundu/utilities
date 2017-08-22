@@ -32,6 +32,21 @@ type JobHandler struct {
 	Jobs []*JobInfo
 }
 
+func (this *JobHandler) GetJob() *JobInfo {
+	job:= <-this.req_chan
+	if job == nil {
+		return nil
+	}
+
+	job.job_start_time = time.Now()
+	return job
+}
+
+func (this *JobHandler) DoneJob(job *JobInfo) {
+	job.job_end_time = time.Now()
+	this.res_chan <- job
+}
+
 func NewJobHandler(num_to_setup int, createWorkerFunc CreateWorkerFunction, print_results bool) *JobHandler {
 	jh := &JobHandler{
 		req_chan:               make(chan *JobInfo, num_to_setup),
@@ -50,7 +65,7 @@ func NewJobHandler(num_to_setup int, createWorkerFunc CreateWorkerFunction, prin
 		worker := createWorkerFunc()
 		jh.worker_list[w] = worker
 		worker.PreRun()
-		go worker.Run(w, jh.req_chan, jh.res_chan)
+		go worker.Run(w, jh)
 	}
 
 	jh.ws_job_tracker.Add(1) //goroutine to wait for results
@@ -60,7 +75,6 @@ func NewJobHandler(num_to_setup int, createWorkerFunc CreateWorkerFunction, prin
 }
 
 func (this *JobHandler) AddJob(job *JobInfo) {
-	job.job_start_time = time.Now()
 	this.req_chan <- job
 	atomic.AddInt32(&this.num_added, 1)
 }
@@ -115,7 +129,6 @@ func (this *JobHandler) waitForResults(print_results bool) {
 			if result == nil {
 				continue
 			}
-			result.job_end_time = time.Now()
 
 			if print_results == true {
 				logger.Info.Printf("%0.3fms %s %v\n",

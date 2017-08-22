@@ -68,6 +68,6 @@ func (this BasicResponseResult) GetResult() Result {
 type Worker interface {
 	PreRun()
 	PostRun()
-	Run(id int, jobs <-chan *JobInfo, results chan<- *JobInfo)
+	Run(id int, jh *JobHandler)
 }
 type CreateWorkerFunction func() Worker
