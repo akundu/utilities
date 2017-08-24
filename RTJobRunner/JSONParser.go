@@ -17,7 +17,7 @@ type SubstituteData struct {
 
 type JSONFields struct {
 	AdditionalStatements []string          `json:"additionalStatements,omitempty"`
-	ExtraFields          map[string]string `json:"extraFields,omitempty"`
+	ExtraFields          map[string]interface{} `json:"extraFields,omitempty"`
 }
 type JSONCommands struct {
 	CommandToExecute string                     `json:"commandToExecute"`
