@@ -12,6 +12,7 @@ import (
 
 	"github.com/akundu/utilities/logger"
 	"github.com/satori/go.uuid"
+	"github.com/montanaflynn/stats"
 )
 
 type JobHandler struct {
@@ -22,14 +23,23 @@ type JobHandler struct {
 	num_added              int32
 	num_run_simultaneously int
 	create_worker_func     CreateWorkerFunction
-	print_results          bool
 
-	done_channel chan bool
-	worker_list  []Worker
-	id           string
-	err          error
+	done_channel 				chan bool
+	worker_list  				[]Worker
+	id           				string
+	err          				error
+	print_individual_results 	bool
+	print_statistics 			bool
 
-	Jobs []*JobInfo
+	Jobs 						[]*JobInfo
+}
+
+func (this *JobHandler) SetPrintIndividualResults(val bool) {
+	this.print_individual_results = val
+}
+
+func (this *JobHandler) SetPrintStatistics(val bool) {
+	this.print_statistics = val
 }
 
 func (this *JobHandler) GetJob() *JobInfo {
@@ -47,7 +57,7 @@ func (this *JobHandler) DoneJob(job *JobInfo) {
 	this.res_chan <- job
 }
 
-func NewJobHandler(num_to_setup int, createWorkerFunc CreateWorkerFunction, print_results bool) *JobHandler {
+func NewJobHandler(num_to_setup int, createWorkerFunc CreateWorkerFunction) *JobHandler {
 	jh := &JobHandler{
 		req_chan:               make(chan *JobInfo, num_to_setup),
 		res_chan:               make(chan *JobInfo, num_to_setup),
@@ -57,8 +67,8 @@ func NewJobHandler(num_to_setup int, createWorkerFunc CreateWorkerFunction, prin
 		worker_list:            make([]Worker, num_to_setup),
 		done_channel:           make(chan bool, 1),
 		id:                     fmt.Sprintf("%s", uuid.NewV4()),
-		print_results:          print_results,
 		err:                    nil,
+		print_statistics:       true,
 	}
 
 	for w := 0; w < num_to_setup; w++ {
@@ -69,7 +79,7 @@ func NewJobHandler(num_to_setup int, createWorkerFunc CreateWorkerFunction, prin
 	}
 
 	jh.ws_job_tracker.Add(1) //goroutine to wait for results
-	go jh.waitForResults(print_results)
+	go jh.waitForResults()
 
 	return jh
 }
@@ -119,8 +129,26 @@ func (this *JobHandler) appendResults(r *JobInfo) {
 		this.err = r.Resp.GetError()
 	}
 }
-func (this *JobHandler) waitForResults(print_results bool) {
+func (this *JobHandler) waitForResults() {
+	timing_results := make(stats.Float64Data, 0)
+
+	var job_name string
 	var num_processed int32 = 0
+	var job_complete bool
+
+	go func() {
+		for ;; {
+			time.Sleep(2000*time.Millisecond)
+			logger.Trace.Printf("%s %d/%d\n",
+						  job_name,
+						  num_processed,
+						  atomic.LoadInt32(&this.num_added))
+			if job_complete == true {
+				break
+			}
+		}
+	}()
+
 	done_adding := false
 	for done_adding == false || num_processed < atomic.LoadInt32(&this.num_added) {
 		select {
@@ -130,22 +158,71 @@ func (this *JobHandler) waitForResults(print_results bool) {
 				continue
 			}
 
-			if print_results == true {
-				logger.Info.Printf("%0.3fms %s %v\n",
-					(float64(result.JobTime())/1000000),
+			timing := (float64(result.JobTime())/1000000)
+			timing_results = append(timing_results, timing)
+
+			job_name = result.Req.GetName()
+			if this.print_individual_results == true {
+				logger.Trace.Printf("%0.3fms %s %v\n",
+					timing,
 					result.Req.GetName(),
 					result.Resp)
 			}
 			this.appendResults(result)
+
 		case done_adding = <-this.done_channel:
 			continue
 		}
 	}
-	logger.Trace.Println("done processing results")
+	job_complete = true
+
 
 	//clean up the workers if needed
 	for i := range this.worker_list {
 		this.worker_list[i].PostRun()
+	}
+
+	if this.print_statistics == true && timing_results.Len() > 0{
+		logger.Info.Println("Results: ", job_name)
+		if nth_percentile,err := timing_results.Percentile(10.0); err == nil {
+			logger.Info.Printf("10%%  :   %10.2f\n", nth_percentile)
+		}
+		if nth_percentile,err := timing_results.Percentile(25.0); err == nil {
+			logger.Info.Printf("25%%  :   %10.2f\n", nth_percentile)
+		}
+		if nth_percentile,err := timing_results.Percentile(50.0); err == nil {
+			logger.Info.Printf("50%%  :   %10.2f\n", nth_percentile)
+		}
+		if nth_percentile,err := timing_results.Percentile(75.0); err == nil {
+			logger.Info.Printf("75%%  :   %10.2f\n", nth_percentile)
+		}
+		if nth_percentile,err := timing_results.Percentile(90.0); err == nil {
+			logger.Info.Printf("90%%  :   %10.2f\n", nth_percentile)
+		}
+		if nth_percentile,err := timing_results.Percentile(95.0); err == nil {
+			logger.Info.Printf("95%%  :   %10.2f\n", nth_percentile)
+		}
+		if nth_percentile,err := timing_results.Percentile(99.0); err == nil {
+			logger.Info.Printf("99%%  :   %10.2f\n", nth_percentile)
+		}
+		if nth_percentile,err := timing_results.Percentile(100.0); err == nil {
+			logger.Info.Printf("100%% :   %10.2f\n", nth_percentile)
+		}
+
+		logger.Info.Println()
+		logger.Info.Printf("NumRun : %10d\n", timing_results.Len())
+		val,_ := timing_results.Median()
+		logger.Info.Printf("Medan  : %10.2f\n", val)
+		val,_ = timing_results.Mean()
+		logger.Info.Printf("Mean   : %10.2f\n", val)
+		logger.Info.Printf("Req/sec: %10.2f\n", 1000/float64(val))
+		val,_ = timing_results.Max()
+		logger.Info.Printf("Max    : %10.2f\n", val)
+		val,_ = timing_results.Min()
+		logger.Info.Printf("Min    : %10.2f\n", val)
+		val,_ = timing_results.StandardDeviation()
+		logger.Info.Printf("StdDev : %10.2f\n", val)
+		logger.Info.Println()
 	}
 
 	this.ws_job_tracker.Done()
@@ -158,3 +235,4 @@ func (this *JobHandler) DoneAddingJobs() {
 	}
 	this.done_channel <- true
 }
+

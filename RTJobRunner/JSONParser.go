@@ -86,7 +86,10 @@ func processJobsFromJSON(jhjp *JSONJobContainer, jh *JobHandler, num_to_run_simu
 			jhjp.NumIterations = 1
 		}
 		var got_error error = nil
-		json_jobs := NewJobHandler(num_to_run_simultaneously, jh.create_worker_func, jh.print_results)
+		json_jobs := NewJobHandler(num_to_run_simultaneously, jh.create_worker_func)
+		json_jobs.SetPrintStatistics(jh.print_statistics)
+		json_jobs.SetPrintIndividualResults(jh.print_individual_results)
+
 		for i := 0; i < jhjp.NumIterations; i++ {
 			if(len(jhjp.Job.Substitutes) == 0) {
 				json_jobs.AddJob(NewRTRequestResultObject(&JSONJobProcessor{

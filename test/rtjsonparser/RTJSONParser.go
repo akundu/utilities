@@ -39,7 +39,9 @@ func (this *worker) Run(id int, jh *RTJobRunner.JobHandler) {
 }
 
 func main() {
-	jh := RTJobRunner.NewJobHandler(1, CreateWorker, *print_results_ptr)
+	jh := RTJobRunner.NewJobHandler(1, CreateWorker)
+	jh.SetPrintIndividualResults(*print_results_ptr)
+	jh.SetPrintStatistics(true)
 	if err := RTJobRunner.ProcessJobsFromJSON(*json_file_ptr, jh, *num_simultaneously_to_run_ptr); err != nil {
 		logger.Error.Println(err)
 		return
