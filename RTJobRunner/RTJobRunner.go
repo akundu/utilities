@@ -13,6 +13,7 @@ import (
 	"github.com/akundu/utilities/logger"
 	"github.com/satori/go.uuid"
 	"github.com/montanaflynn/stats"
+	"bytes"
 )
 
 type JobHandler struct {
@@ -183,46 +184,49 @@ func (this *JobHandler) waitForResults() {
 	}
 
 	if this.print_statistics == true && timing_results.Len() > 0{
-		logger.Info.Println("Results: ", job_name)
+		buffered_writer := bytes.NewBufferString("")
+		buffered_writer.WriteString(fmt.Sprintln("Results: ", job_name))
 		if nth_percentile,err := timing_results.Percentile(10.0); err == nil {
-			logger.Info.Printf("10%%  :   %10.2f\n", nth_percentile)
+			buffered_writer.WriteString(fmt.Sprintf("10%%  :   %10.2f\n", nth_percentile))
 		}
 		if nth_percentile,err := timing_results.Percentile(25.0); err == nil {
-			logger.Info.Printf("25%%  :   %10.2f\n", nth_percentile)
+			buffered_writer.WriteString(fmt.Sprintf("25%%  :   %10.2f\n", nth_percentile))
 		}
 		if nth_percentile,err := timing_results.Percentile(50.0); err == nil {
-			logger.Info.Printf("50%%  :   %10.2f\n", nth_percentile)
+			buffered_writer.WriteString(fmt.Sprintf("50%%  :   %10.2f\n", nth_percentile))
 		}
 		if nth_percentile,err := timing_results.Percentile(75.0); err == nil {
-			logger.Info.Printf("75%%  :   %10.2f\n", nth_percentile)
+			buffered_writer.WriteString(fmt.Sprintf("75%%  :   %10.2f\n", nth_percentile))
 		}
 		if nth_percentile,err := timing_results.Percentile(90.0); err == nil {
-			logger.Info.Printf("90%%  :   %10.2f\n", nth_percentile)
+			buffered_writer.WriteString(fmt.Sprintf("90%%  :   %10.2f\n", nth_percentile))
 		}
 		if nth_percentile,err := timing_results.Percentile(95.0); err == nil {
-			logger.Info.Printf("95%%  :   %10.2f\n", nth_percentile)
+			buffered_writer.WriteString(fmt.Sprintf("95%%  :   %10.2f\n", nth_percentile))
 		}
 		if nth_percentile,err := timing_results.Percentile(99.0); err == nil {
-			logger.Info.Printf("99%%  :   %10.2f\n", nth_percentile)
+			buffered_writer.WriteString(fmt.Sprintf("99%%  :   %10.2f\n", nth_percentile))
 		}
 		if nth_percentile,err := timing_results.Percentile(100.0); err == nil {
-			logger.Info.Printf("100%% :   %10.2f\n", nth_percentile)
+			buffered_writer.WriteString(fmt.Sprintf("100%% :   %10.2f\n", nth_percentile))
 		}
 
-		logger.Info.Println()
-		logger.Info.Printf("NumRun : %10d\n", timing_results.Len())
+		buffered_writer.WriteString(fmt.Sprintln())
+		buffered_writer.WriteString(fmt.Sprintf("NumRun : %10d\n", timing_results.Len()))
 		val,_ := timing_results.Median()
-		logger.Info.Printf("Medan  : %10.2f\n", val)
+		buffered_writer.WriteString(fmt.Sprintf("Medan  : %10.2f\n", val))
 		val,_ = timing_results.Mean()
-		logger.Info.Printf("Mean   : %10.2f\n", val)
-		logger.Info.Printf("Req/sec: %10.2f\n", 1000/float64(val))
+		buffered_writer.WriteString(fmt.Sprintf("Mean   : %10.2f\n", val))
+		buffered_writer.WriteString(fmt.Sprintf("Req/sec: %10.2f\n", 1000/float64(val)))
 		val,_ = timing_results.Max()
-		logger.Info.Printf("Max    : %10.2f\n", val)
+		buffered_writer.WriteString(fmt.Sprintf("Max    : %10.2f\n", val))
 		val,_ = timing_results.Min()
-		logger.Info.Printf("Min    : %10.2f\n", val)
+		buffered_writer.WriteString(fmt.Sprintf("Min    : %10.2f\n", val))
 		val,_ = timing_results.StandardDeviation()
-		logger.Info.Printf("StdDev : %10.2f\n", val)
-		logger.Info.Println()
+		buffered_writer.WriteString(fmt.Sprintf("StdDev : %10.2f\n", val))
+		buffered_writer.WriteString(fmt.Sprintln())
+
+		logger.Info.Println(buffered_writer.String())
 	}
 
 	this.ws_job_tracker.Done()
