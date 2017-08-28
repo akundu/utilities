@@ -10,10 +10,11 @@ import (
 
 	"time"
 
-	"github.com/akundu/utilities/logger"
-	"github.com/satori/go.uuid"
-	"github.com/montanaflynn/stats"
 	"bytes"
+
+	"github.com/akundu/utilities/logger"
+	"github.com/montanaflynn/stats"
+	"github.com/satori/go.uuid"
 )
 
 type JobHandler struct {
@@ -25,14 +26,14 @@ type JobHandler struct {
 	num_run_simultaneously int
 	create_worker_func     CreateWorkerFunction
 
-	done_channel 				chan bool
-	worker_list  				[]Worker
-	id           				string
-	err          				error
-	print_individual_results 	bool
-	print_statistics 			bool
+	done_channel             chan bool
+	worker_list              []Worker
+	id                       string
+	err                      error
+	print_individual_results bool
+	print_statistics         bool
 
-	Jobs 						[]*JobInfo
+	Jobs []*JobInfo
 }
 
 func (this *JobHandler) SetPrintIndividualResults(val bool) {
@@ -44,7 +45,7 @@ func (this *JobHandler) SetPrintStatistics(val bool) {
 }
 
 func (this *JobHandler) GetJob() *JobInfo {
-	job:= <-this.req_chan
+	job := <-this.req_chan
 	if job == nil {
 		return nil
 	}
@@ -138,12 +139,12 @@ func (this *JobHandler) waitForResults() {
 	var job_complete bool
 
 	go func() {
-		for ;; {
-			time.Sleep(2000*time.Millisecond)
+		for {
+			time.Sleep(2000 * time.Millisecond)
 			logger.Trace.Printf("%s %d/%d\n",
-						  job_name,
-						  num_processed,
-						  atomic.LoadInt32(&this.num_added))
+				job_name,
+				num_processed,
+				atomic.LoadInt32(&this.num_added))
 			if job_complete == true {
 				break
 			}
@@ -159,7 +160,7 @@ func (this *JobHandler) waitForResults() {
 				continue
 			}
 
-			timing := (float64(result.JobTime())/1000000)
+			timing := (float64(result.JobTime()) / 1000000)
 			timing_results = append(timing_results, timing)
 
 			job_name = result.Req.GetName()
@@ -177,52 +178,51 @@ func (this *JobHandler) waitForResults() {
 	}
 	job_complete = true
 
-
 	//clean up the workers if needed
 	for i := range this.worker_list {
 		this.worker_list[i].PostRun()
 	}
 
-	if this.print_statistics == true && timing_results.Len() > 0{
+	if this.print_statistics == true && timing_results.Len() > 0 {
 		buffered_writer := bytes.NewBufferString("")
 		buffered_writer.WriteString(fmt.Sprintln("Results: ", job_name))
-		if nth_percentile,err := timing_results.Percentile(10.0); err == nil {
+		if nth_percentile, err := timing_results.Percentile(10.0); err == nil {
 			buffered_writer.WriteString(fmt.Sprintf("10%%  :   %10.2f\n", nth_percentile))
 		}
-		if nth_percentile,err := timing_results.Percentile(25.0); err == nil {
+		if nth_percentile, err := timing_results.Percentile(25.0); err == nil {
 			buffered_writer.WriteString(fmt.Sprintf("25%%  :   %10.2f\n", nth_percentile))
 		}
-		if nth_percentile,err := timing_results.Percentile(50.0); err == nil {
+		if nth_percentile, err := timing_results.Percentile(50.0); err == nil {
 			buffered_writer.WriteString(fmt.Sprintf("50%%  :   %10.2f\n", nth_percentile))
 		}
-		if nth_percentile,err := timing_results.Percentile(75.0); err == nil {
+		if nth_percentile, err := timing_results.Percentile(75.0); err == nil {
 			buffered_writer.WriteString(fmt.Sprintf("75%%  :   %10.2f\n", nth_percentile))
 		}
-		if nth_percentile,err := timing_results.Percentile(90.0); err == nil {
+		if nth_percentile, err := timing_results.Percentile(90.0); err == nil {
 			buffered_writer.WriteString(fmt.Sprintf("90%%  :   %10.2f\n", nth_percentile))
 		}
-		if nth_percentile,err := timing_results.Percentile(95.0); err == nil {
+		if nth_percentile, err := timing_results.Percentile(95.0); err == nil {
 			buffered_writer.WriteString(fmt.Sprintf("95%%  :   %10.2f\n", nth_percentile))
 		}
-		if nth_percentile,err := timing_results.Percentile(99.0); err == nil {
+		if nth_percentile, err := timing_results.Percentile(99.0); err == nil {
 			buffered_writer.WriteString(fmt.Sprintf("99%%  :   %10.2f\n", nth_percentile))
 		}
-		if nth_percentile,err := timing_results.Percentile(100.0); err == nil {
+		if nth_percentile, err := timing_results.Percentile(100.0); err == nil {
 			buffered_writer.WriteString(fmt.Sprintf("100%% :   %10.2f\n", nth_percentile))
 		}
 
 		buffered_writer.WriteString(fmt.Sprintln())
 		buffered_writer.WriteString(fmt.Sprintf("NumRun : %10d\n", timing_results.Len()))
-		val,_ := timing_results.Median()
-		buffered_writer.WriteString(fmt.Sprintf("Medan  : %10.2f\n", val))
-		val,_ = timing_results.Mean()
+		val, _ := timing_results.Median()
+		buffered_writer.WriteString(fmt.Sprintf("Median : %10.2f\n", val))
+		val, _ = timing_results.Mean()
 		buffered_writer.WriteString(fmt.Sprintf("Mean   : %10.2f\n", val))
 		buffered_writer.WriteString(fmt.Sprintf("Req/sec: %10.2f\n", 1000/float64(val)))
-		val,_ = timing_results.Max()
+		val, _ = timing_results.Max()
 		buffered_writer.WriteString(fmt.Sprintf("Max    : %10.2f\n", val))
-		val,_ = timing_results.Min()
+		val, _ = timing_results.Min()
 		buffered_writer.WriteString(fmt.Sprintf("Min    : %10.2f\n", val))
-		val,_ = timing_results.StandardDeviation()
+		val, _ = timing_results.StandardDeviation()
 		buffered_writer.WriteString(fmt.Sprintf("StdDev : %10.2f\n", val))
 		buffered_writer.WriteString(fmt.Sprintln())
 
@@ -239,4 +239,3 @@ func (this *JobHandler) DoneAddingJobs() {
 	}
 	this.done_channel <- true
 }
-

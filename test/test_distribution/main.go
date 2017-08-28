@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	rt := distribution.NewgaussianGenerator(0, 100, 1000)
+	rt := distribution.NewgaussianGenerator(0, 100, 200000)
 	for _, v := range rt.GenerateNumbers() {
 		fmt.Println(v)
 	}
