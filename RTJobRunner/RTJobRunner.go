@@ -217,7 +217,7 @@ func (this *JobHandler) waitForResults() {
 		buffered_writer.WriteString(fmt.Sprintf("Median : %10.2f\n", val))
 		val, _ = timing_results.Mean()
 		buffered_writer.WriteString(fmt.Sprintf("Mean   : %10.2f\n", val))
-		buffered_writer.WriteString(fmt.Sprintf("Req/sec: %10.2f\n", 1000/float64(val)))
+		buffered_writer.WriteString(fmt.Sprintf("Req/sec/core: %10.2f\n", 1000/float64(val)))
 		val, _ = timing_results.Max()
 		buffered_writer.WriteString(fmt.Sprintf("Max    : %10.2f\n", val))
 		val, _ = timing_results.Min()
