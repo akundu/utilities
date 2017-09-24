@@ -30,18 +30,19 @@ type JobHandler struct {
 	worker_list              []Worker
 	id                       string
 	err                      error
-	print_individual_results bool
-	print_statistics         bool
+
+	PrintIndividualResults bool
+	PrintStatistics        bool
 
 	Jobs []*JobInfo
 }
 
 func (this *JobHandler) SetPrintIndividualResults(val bool) {
-	this.print_individual_results = val
+	this.PrintIndividualResults = val
 }
 
 func (this *JobHandler) SetPrintStatistics(val bool) {
-	this.print_statistics = val
+	this.PrintStatistics = val
 }
 
 func (this *JobHandler) GetJob() *JobInfo {
@@ -70,7 +71,7 @@ func NewJobHandler(num_to_setup int, createWorkerFunc CreateWorkerFunction) *Job
 		done_channel:           make(chan bool, 1),
 		id:                     fmt.Sprintf("%s", uuid.NewV4()),
 		err:                    nil,
-		print_statistics:       true,
+		PrintStatistics:        true,
 	}
 
 	for w := 0; w < num_to_setup; w++ {
@@ -164,7 +165,7 @@ func (this *JobHandler) waitForResults() {
 			timing_results = append(timing_results, timing)
 
 			job_name = result.Req.GetName()
-			if this.print_individual_results == true {
+			if this.PrintIndividualResults == true {
 				logger.Trace.Printf("%0.3fms %s %v\n",
 					timing,
 					result.Req.GetName(),
@@ -183,7 +184,7 @@ func (this *JobHandler) waitForResults() {
 		this.worker_list[i].PostRun()
 	}
 
-	if this.print_statistics == true && timing_results.Len() > 0 {
+	if this.PrintStatistics == true && timing_results.Len() > 0 {
 		buffered_writer := bytes.NewBufferString("")
 		buffered_writer.WriteString(fmt.Sprintln("Results: ", job_name))
 		if nth_percentile, err := timing_results.Percentile(10.0); err == nil {
