@@ -26,12 +26,13 @@ type JobHandler struct {
 	num_run_simultaneously int
 	create_worker_func     CreateWorkerFunction
 
-	done_channel             chan bool
-	worker_list              []Worker
-	id                       string
-	err                      error
+	done_channel chan bool
+	worker_list  []Worker
+	id           string
+	err          error
 
 	PrintIndividualResults bool
+	PrintPeriodicResults   bool
 	PrintStatistics        bool
 
 	Jobs []*JobInfo
@@ -39,6 +40,10 @@ type JobHandler struct {
 
 func (this *JobHandler) SetPrintIndividualResults(val bool) {
 	this.PrintIndividualResults = val
+}
+
+func (this *JobHandler) SetPrintPeriodicResults(val bool) {
+	this.PrintPeriodicResults = val
 }
 
 func (this *JobHandler) SetPrintStatistics(val bool) {
@@ -139,18 +144,20 @@ func (this *JobHandler) waitForResults() {
 	var num_processed int32 = 0
 	var job_complete bool
 
-	go func() {
-		for {
-			time.Sleep(2000 * time.Millisecond)
-			logger.Trace.Printf("%s %d/%d\n",
-				job_name,
-				num_processed,
-				atomic.LoadInt32(&this.num_added))
-			if job_complete == true {
-				break
+	if this.PrintPeriodicResults == true {
+		go func() {
+			for {
+				time.Sleep(2000 * time.Millisecond)
+				logger.Info.Printf("%s %d/%d\n",
+					job_name,
+					num_processed,
+					atomic.LoadInt32(&this.num_added))
+				if job_complete == true {
+					break
+				}
 			}
-		}
-	}()
+		}()
+	}
 
 	done_adding := false
 	for done_adding == false || num_processed < atomic.LoadInt32(&this.num_added) {
@@ -166,7 +173,7 @@ func (this *JobHandler) waitForResults() {
 
 			job_name = result.Req.GetName()
 			if this.PrintIndividualResults == true {
-				logger.Trace.Printf("%0.3fms %s %v\n",
+				logger.Info.Printf("%0.3fms %s %v\n",
 					timing,
 					result.Req.GetName(),
 					result.Resp)
