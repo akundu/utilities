@@ -11,31 +11,28 @@ type GoJob struct {
 	tasks []GoTask
 }
 
-//pair is of type Pair{[]*Pair{status, time_taken}, total time taken to complete the job}
 func (this *GoJob) Run() ([]*containers.Tuple, time.Duration) {
-	results_saved := make([]*containers.Tuple, len(this.tasks))
+	resultsSaved := make([]*containers.Tuple, len(this.tasks))
 	var wg sync.WaitGroup
 
-	start_time_overall := time.Now()
-	for task_index, task := range this.tasks {
-		local_task_index := task_index
+	startTimeOverall := time.Now()
+	for taskIndex, task := range this.tasks {
+		localTask := task
+		localTaskIndex := taskIndex
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			var delta time.Duration = 0
-			start_time := time.Now()
-			result := task.Run()
+			startTime := time.Now()
+			result := localTask.Run()
 			if result.Status == nil {
-				delta = time.Since(start_time)
+				delta = time.Since(startTime)
 			}
-
-			results_saved[local_task_index] = containers.NewTuple(result, delta)
+			resultsSaved[localTaskIndex] = containers.NewTuple(result, delta, localTask)
 		}()
 	}
 	wg.Wait()
-	delta_time_overall := time.Since(start_time_overall)
-
-	return results_saved, delta_time_overall
+	return resultsSaved, time.Since(startTimeOverall)
 }
 func (this *GoJob) AddTask(gt GoTask) {
 	this.tasks = append(this.tasks, gt)
