@@ -1,0 +1,11 @@
+{
+	"ImportPath": "github.com/akundu/utilities/statistics/distribution",
+	"GoVersion": "go1.8",
+	"GodepVersion": "v79",
+	"Deps": [
+		{
+			"ImportPath": "github.com/leesper/go_rng",
+			"Rev": "edc201f107a87fc2a2dc965f334c89e50fcd682a"
+		}
+	]
+}

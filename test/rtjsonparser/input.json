@@ -1,0 +1,26 @@
+{
+    "job" : {
+        "commandToExecute" : "hello"
+    },
+    "name" : "print job",
+    "postJobs" : [
+        {
+            "job" : {
+                "commandToExecute" : "world"
+            },
+            "name" : "world"
+        },
+        {
+            "job" : {
+                "commandToExecute" : "test1"
+            },
+            "name" : "test1"
+        },
+        {
+            "job" : {
+                "commandToExecute" : "test2"
+            },
+            "name" : "test2"
+        }
+    ]
+}

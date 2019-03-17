@@ -1,6 +1,8 @@
 package logger
 
 import (
+	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -23,8 +25,9 @@ func Init(traceHandle io.Writer, infoHandle io.Writer, warningHandle io.Writer, 
 }
 
 var already_initialized bool = false
+
 func DefaultLoggerInit() {
-	if(already_initialized == false ) {
+	if already_initialized == false {
 		Init(ioutil.Discard, os.Stdout, os.Stdout, os.Stderr)
 		already_initialized = true
 	}
@@ -33,4 +36,13 @@ func DefaultLoggerInit() {
 func TrackTime(start time.Time, name string) {
 	elapsed := time.Since(start)
 	Info.Printf("%s %d\n", name, int(elapsed/1000000))
+}
+
+func JSONPrintDS(input_data interface{}) {
+	data, err := json.Marshal(input_data)
+	if err == nil {
+		fmt.Println(string(data[:]))
+	} else {
+		log.Printf("got err %v while marshaling", err)
+	}
 }

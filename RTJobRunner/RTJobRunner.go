@@ -2,66 +2,102 @@ package RTJobRunner
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
+
+	"time"
+
+	"bytes"
 
 	"github.com/akundu/utilities/logger"
+	"github.com/montanaflynn/stats"
+	"github.com/satori/go.uuid"
 )
 
-type Response interface{}
-type Request interface{}
-type Worker func(int, <-chan Request, chan<- Response)
-
 type JobHandler struct {
-	jobs           chan Request
-	results        chan Response
-	ws_job_tracker sync.WaitGroup
-	num_added      int
-	done_adding    bool
-	worker         Worker
+	req_chan chan *JobInfo
+	res_chan chan *JobInfo
+
+	ws_job_tracker         sync.WaitGroup
+	num_added              int32
+	num_run_simultaneously int
+	create_worker_func     CreateWorkerFunction
+
+	done_channel chan bool
+	worker_list  []Worker
+	id           string
+	err          error
+
+	PrintIndividualResults bool
+	PrintPeriodicResults   bool
+	PrintStatistics        bool
+
+	Jobs []*JobInfo
 }
 
-func NewJobHandler(num_to_setup int, worker Worker, print_results bool) *JobHandler {
+func (this *JobHandler) SetPrintIndividualResults(val bool) {
+	this.PrintIndividualResults = val
+}
+
+func (this *JobHandler) SetPrintPeriodicResults(val bool) {
+	this.PrintPeriodicResults = val
+}
+
+func (this *JobHandler) SetPrintStatistics(val bool) {
+	this.PrintStatistics = val
+}
+
+func (this *JobHandler) GetJob() *JobInfo {
+	job := <-this.req_chan
+	if job == nil {
+		return nil
+	}
+
+	job.job_start_time = time.Now()
+	return job
+}
+
+func (this *JobHandler) DoneJob(job *JobInfo) {
+	job.job_end_time = time.Now()
+	this.res_chan <- job
+}
+
+func NewJobHandler(num_to_setup int, createWorkerFunc CreateWorkerFunction) *JobHandler {
 	jh := &JobHandler{
-		jobs:        make(chan Request, num_to_setup),
-		results:     make(chan Response, num_to_setup),
-		num_added:   0,
-		done_adding: false,
+		req_chan:               make(chan *JobInfo, num_to_setup),
+		res_chan:               make(chan *JobInfo, num_to_setup),
+		num_run_simultaneously: num_to_setup,
+		num_added:              0,
+		create_worker_func:     createWorkerFunc,
+		worker_list:            make([]Worker, num_to_setup),
+		done_channel:           make(chan bool, 1),
+		id:                     fmt.Sprintf("%s", uuid.NewV4()),
+		err:                    nil,
+		PrintStatistics:        true,
 	}
 
 	for w := 0; w < num_to_setup; w++ {
-		go worker(w, jh.jobs, jh.results)
+		worker := createWorkerFunc()
+		jh.worker_list[w] = worker
+		worker.PreRun()
+		go worker.Run(w, jh)
 	}
 
-	jh.ws_job_tracker.Add(1)
-	go jh.waitForResults(print_results)
+	jh.ws_job_tracker.Add(1) //goroutine to wait for results
+	go jh.waitForResults()
 
 	return jh
 }
 
-func (this *JobHandler) AddJob(job Request) {
-	this.jobs <- job
-	this.num_added++
+func (this *JobHandler) AddJob(job *JobInfo) {
+	this.req_chan <- job
+	atomic.AddInt32(&this.num_added, 1)
 }
 
-/*
-func (this *JobHandler) GetJobsFromStdin() {
-	//read from stdin
-	bio := bufio.NewReader(os.Stdin)
-	for {
-		line, err := bio.ReadString('\n')
-		if err != nil {
-			break
-		}
-		line = strings.Trim(line, "\n \r\n")
-		logger.Trace.Println("adding ", line)
-		this.AddJob(line)
-	}
-}
-*/
-
-type JobHandlerLineOutputFilter func(string) string //line - outputline - if outputline is empty - dont add anything
+type JobHandlerLineOutputFilter func(string) Request //line - outputline - if outputline is empty - dont add anything
 func (this *JobHandler) GetJobsFromStdin(jhlo JobHandlerLineOutputFilter) {
 	//read from stdin
 	bio := bufio.NewReader(os.Stdin)
@@ -73,20 +109,20 @@ func (this *JobHandler) GetJobsFromStdin(jhlo JobHandlerLineOutputFilter) {
 		line = strings.Trim(line, "\n \r\n")
 		logger.Trace.Println("adding ", line)
 		if jhlo == nil {
-			this.AddJob(line)
+			this.AddJob(NewRTRequestResultObject(&StringRequest{line}))
 		} else {
-			new_line := jhlo(line)
-			if len(new_line) != 0 {
-				this.AddJob(new_line)
+			filtered_job := jhlo(line)
+			if filtered_job != nil {
+				this.AddJob(NewRTRequestResultObject(filtered_job))
 			}
 		}
 	}
 
-	//call the handler one last time - in case they need to add anything else
+	//call the handler one last time - in case the filter wants to add anything else
 	if jhlo != nil {
-		line := jhlo("")
-		if len(line) > 0 {
-			this.AddJob(line)
+		filtered_job := jhlo("")
+		if filtered_job != nil {
+			this.AddJob(NewRTRequestResultObject(filtered_job))
 		}
 	}
 }
@@ -95,20 +131,119 @@ func (this *JobHandler) WaitForJobsToComplete() {
 	this.ws_job_tracker.Wait()
 }
 
-func (this *JobHandler) waitForResults(print_results bool) {
-	num_processed := 0
-	for this.done_adding == false || num_processed < this.num_added {
-		result := <-this.results
-		num_processed++
-		if result != nil && print_results == true {
-			logger.Info.Println(result)
+func (this *JobHandler) appendResults(r *JobInfo) {
+	this.Jobs = append(this.Jobs, r)
+	if r.Resp.GetError() != nil {
+		this.err = r.Resp.GetError()
+	}
+}
+func (this *JobHandler) waitForResults() {
+	timing_results := make(stats.Float64Data, 0)
+
+	var job_name string
+	var num_processed int32 = 0
+	var job_complete bool
+
+	if this.PrintPeriodicResults == true {
+		go func() {
+			for {
+				time.Sleep(2000 * time.Millisecond)
+				logger.Info.Printf("%s %d/%d\n",
+					job_name,
+					num_processed,
+					atomic.LoadInt32(&this.num_added))
+				if job_complete == true {
+					break
+				}
+			}
+		}()
+	}
+
+	done_adding := false
+	for done_adding == false || num_processed < atomic.LoadInt32(&this.num_added) {
+		select {
+		case result := <-this.res_chan:
+			num_processed++
+			if result == nil {
+				continue
+			}
+
+			timing := (float64(result.JobTime()) / 1000000)
+			timing_results = append(timing_results, timing)
+
+			job_name = result.Req.GetName()
+			if this.PrintIndividualResults == true {
+				logger.Info.Printf("%0.3fms %s %v\n",
+					timing,
+					result.Req.GetName(),
+					result.Resp)
+			}
+			this.appendResults(result)
+
+		case done_adding = <-this.done_channel:
+			continue
 		}
 	}
+	job_complete = true
+
+	//clean up the workers if needed
+	for i := range this.worker_list {
+		this.worker_list[i].PostRun()
+	}
+
+	if this.PrintStatistics == true && timing_results.Len() > 0 {
+		buffered_writer := bytes.NewBufferString("")
+		buffered_writer.WriteString(fmt.Sprintln("Results: ", job_name))
+		if nth_percentile, err := timing_results.Percentile(10.0); err == nil {
+			buffered_writer.WriteString(fmt.Sprintf("10%%  :   %10.2f\n", nth_percentile))
+		}
+		if nth_percentile, err := timing_results.Percentile(25.0); err == nil {
+			buffered_writer.WriteString(fmt.Sprintf("25%%  :   %10.2f\n", nth_percentile))
+		}
+		if nth_percentile, err := timing_results.Percentile(50.0); err == nil {
+			buffered_writer.WriteString(fmt.Sprintf("50%%  :   %10.2f\n", nth_percentile))
+		}
+		if nth_percentile, err := timing_results.Percentile(75.0); err == nil {
+			buffered_writer.WriteString(fmt.Sprintf("75%%  :   %10.2f\n", nth_percentile))
+		}
+		if nth_percentile, err := timing_results.Percentile(90.0); err == nil {
+			buffered_writer.WriteString(fmt.Sprintf("90%%  :   %10.2f\n", nth_percentile))
+		}
+		if nth_percentile, err := timing_results.Percentile(95.0); err == nil {
+			buffered_writer.WriteString(fmt.Sprintf("95%%  :   %10.2f\n", nth_percentile))
+		}
+		if nth_percentile, err := timing_results.Percentile(99.0); err == nil {
+			buffered_writer.WriteString(fmt.Sprintf("99%%  :   %10.2f\n", nth_percentile))
+		}
+		if nth_percentile, err := timing_results.Percentile(100.0); err == nil {
+			buffered_writer.WriteString(fmt.Sprintf("100%% :   %10.2f\n", nth_percentile))
+		}
+
+		buffered_writer.WriteString(fmt.Sprintln())
+		buffered_writer.WriteString(fmt.Sprintf("NumRun : %10d\n", timing_results.Len()))
+		val, _ := timing_results.Median()
+		buffered_writer.WriteString(fmt.Sprintf("Median : %10.2f\n", val))
+		val, _ = timing_results.Mean()
+		buffered_writer.WriteString(fmt.Sprintf("Mean   : %10.2f\n", val))
+		buffered_writer.WriteString(fmt.Sprintf("Req/sec/core: %10.2f\n", 1000/float64(val)))
+		val, _ = timing_results.Max()
+		buffered_writer.WriteString(fmt.Sprintf("Max    : %10.2f\n", val))
+		val, _ = timing_results.Min()
+		buffered_writer.WriteString(fmt.Sprintf("Min    : %10.2f\n", val))
+		val, _ = timing_results.StandardDeviation()
+		buffered_writer.WriteString(fmt.Sprintf("StdDev : %10.2f\n", val))
+		buffered_writer.WriteString(fmt.Sprintln())
+
+		logger.Info.Println(buffered_writer.String())
+	}
+
 	this.ws_job_tracker.Done()
-	logger.Trace.Println("done processing results")
 }
 
 func (this *JobHandler) DoneAddingJobs() {
-	close(this.jobs)
-	this.done_adding = true
+	close(this.req_chan)
+	if atomic.LoadInt32(&this.num_added) == 0 {
+		close(this.res_chan)
+	}
+	this.done_channel <- true
 }
