@@ -14,7 +14,7 @@ import (
 
 	"github.com/akundu/utilities/logger"
 	"github.com/montanaflynn/stats"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 )
 
 type JobHandler struct {
@@ -66,6 +66,11 @@ func (this *JobHandler) DoneJob(job *JobInfo) {
 }
 
 func NewJobHandler(num_to_setup int, createWorkerFunc CreateWorkerFunction) *JobHandler {
+	id, err := uuid.NewV4()
+	if err != nil {
+		panic("couldnt create uuid")
+	}
+
 	jh := &JobHandler{
 		req_chan:               make(chan *JobInfo, num_to_setup),
 		res_chan:               make(chan *JobInfo, num_to_setup),
@@ -74,7 +79,7 @@ func NewJobHandler(num_to_setup int, createWorkerFunc CreateWorkerFunction) *Job
 		create_worker_func:     createWorkerFunc,
 		worker_list:            make([]Worker, num_to_setup),
 		done_channel:           make(chan bool, 1),
-		id:                     fmt.Sprintf("%s", uuid.NewV4()),
+		id:                     fmt.Sprintf("%v", id),
 		err:                    nil,
 		PrintStatistics:        true,
 	}
